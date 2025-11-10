@@ -97,7 +97,8 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
 3. Optionally pickle the winner with `--save-winner path.pkl`.
 4. After evolution the script prints a scenario-by-scenario summary (steps,
    COLREGs penalty, collision status, average cost) and, if `--render` is used,
-   replays each encounter via pygame.
+   replays each encounter via pygame. Without `--render` the five summaries are
+   gathered in parallel so the evaluations finish together before printing.
 
 Checkpoints can be enabled with `--checkpoint-dir` and
 `--checkpoint-interval` to capture intermediate states during longer runs.
@@ -113,9 +114,20 @@ helm/throttle sequences:
 python asv_neat/scripts/crossing_scenario.py --render --duration 40 --seed 42
 ```
 
+CLI flags accepted by the preview script:
+
+| Flag | Description |
+|------|-------------|
+| `--render` | Enable the pygame viewer so that each scenario is visualised in sequence. |
+| `--duration <seconds>` | Number of simulated seconds to replay when `--render` is enabled (default `35`). |
+| `--seed <int>` | Seed for the random give-way policy that drives the placeholder helm/throttle inputs. |
+| `--hp NAME=VALUE` | Repeatable overrides for any hyperparameter exposed by `HyperParameters`. |
+
 Hyperparameters such as the crossing distance or vessel speeds can be adjusted
 here too via `--hp` overrides, ensuring the preview matches the training
-configuration.
+configuration. During rendering the give-way and stand-on destinations are now
+drawn as colour-coded markers so you can confirm that each vessel has its own
+goal beyond the shared crossing point.
 
 ---
 
