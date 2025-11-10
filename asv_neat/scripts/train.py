@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import pickle
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Iterable, Optional
 
@@ -152,30 +153,66 @@ def summarise_winner(
     render: bool = False,
 ) -> None:
     scenario_list = list(scenarios)
-    env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
-    try:
-        if render:
+    network = neat.nn.FeedForwardNetwork.create(result.winner, result.config)
+    print("\nWinner evaluation summary:")
+
+    if render:
+        env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
+        try:
             env.enable_render()
-        network = neat.nn.FeedForwardNetwork.create(result.winner, result.config)
-        total_cost = 0.0
-        print("\nWinner evaluation summary:")
-        for idx, scenario in enumerate(scenario_list, start=1):
-            metrics = simulate_episode(env, scenario, network, hparams, render=render)
-            cost = episode_cost(metrics, hparams)
-            total_cost += cost
-            status = (
-                "goal"
-                if metrics.reached_goal
-                else "collision" if metrics.collided else "timeout"
-            )
-            print(
-                f"  Scenario {idx}: steps={metrics.steps:4d} status={status:8s} "
-                f"min_sep={metrics.min_separation:6.2f}m colregs={metrics.wrong_action_cost:6.2f} "
-                f"cost={cost:7.2f}"
-            )
-        print(f"Average cost: {total_cost / len(scenario_list):.2f}")
-    finally:
-        env.close()
+            total_cost = 0.0
+            for idx, scenario in enumerate(scenario_list, start=1):
+                metrics = simulate_episode(env, scenario, network, hparams, render=True)
+                cost = episode_cost(metrics, hparams)
+                total_cost += cost
+                status = (
+                    "goal"
+                    if metrics.reached_goal
+                    else "collision" if metrics.collided else "timeout"
+                )
+                print(
+                    f"  Scenario {idx}: steps={metrics.steps:4d} status={status:8s} "
+                    f"min_sep={metrics.min_separation:6.2f}m colregs={metrics.wrong_action_cost:6.2f} "
+                    f"cost={cost:7.2f}"
+                )
+            print(f"Average cost: {total_cost / len(scenario_list):.2f}")
+        finally:
+            env.close()
+        return
+
+    def _evaluate(idx_scenario: int, scenario: CrossingScenario):
+        local_env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
+        try:
+            metrics = simulate_episode(local_env, scenario, network, hparams, render=False)
+        finally:
+            local_env.close()
+        cost = episode_cost(metrics, hparams)
+        status = (
+            "goal"
+            if metrics.reached_goal
+            else "collision" if metrics.collided else "timeout"
+        )
+        return idx_scenario, metrics, cost, status
+
+    results = []
+    with ThreadPoolExecutor(max_workers=max(1, len(scenario_list))) as executor:
+        futures = [
+            executor.submit(_evaluate, idx, scenario)
+            for idx, scenario in enumerate(scenario_list, start=1)
+        ]
+        for fut in futures:
+            results.append(fut.result())
+
+    results.sort(key=lambda item: item[0])
+    total_cost = 0.0
+    for idx, metrics, cost, status in results:
+        total_cost += cost
+        print(
+            f"  Scenario {idx}: steps={metrics.steps:4d} status={status:8s} "
+            f"min_sep={metrics.min_separation:6.2f}m colregs={metrics.wrong_action_cost:6.2f} "
+            f"cost={cost:7.2f}"
+        )
+    print(f"Average cost: {total_cost / len(results):.2f}")
 
 
 def main(argv: Optional[list[str]] = None) -> None:

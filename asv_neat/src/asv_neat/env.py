@@ -33,6 +33,8 @@ class CrossingScenarioEnv:
         self.world_w = float(cfg.world_w)
         self.world_h = float(cfg.world_h)
         self.ppm = float(cfg.pixels_per_meter)
+        self._width_px = max(320, int(round(self.world_w * self.ppm)))
+        self._height_px = max(320, int(round(self.world_h * self.ppm)))
 
         self.ships: List[Boat] = []
         self._traces: List[deque] = []
@@ -55,9 +57,9 @@ class CrossingScenarioEnv:
         if not HAS_PYGAME:
             return
         pygame.init()
-        width_px = max(320, int(round(self.world_w * self.ppm)))
-        height_px = max(320, int(round(self.world_h * self.ppm)))
-        self._screen = pygame.display.set_mode((width_px, height_px))
+        self._width_px = max(320, int(round(self.world_w * self.ppm)))
+        self._height_px = max(320, int(round(self.world_h * self.ppm)))
+        self._screen = pygame.display.set_mode((self._width_px, self._height_px))
         pygame.display.set_caption("Crossing Scenario Renderer")
         self._font = pygame.font.Font(None, 18)
         self._clock = pygame.time.Clock()
@@ -78,7 +80,7 @@ class CrossingScenarioEnv:
         return int(round(x_m * self.ppm))
 
     def sy(self, y_m: float) -> int:
-        return int(round(y_m * self.ppm))
+        return self._height_px - int(round(y_m * self.ppm))
 
     # ------------------------------------------------------------------
     # Scenario management
@@ -193,12 +195,42 @@ class CrossingScenarioEnv:
         step = 40.0
         x = 0.0
         while x <= self.world_w + 1e-6:
-            pygame.draw.line(surf, (45, 70, 110), (self.sx(x), 0), (self.sx(x), self.sy(self.world_h)))
+            pygame.draw.line(
+                surf,
+                (45, 70, 110),
+                (self.sx(x), 0),
+                (self.sx(x), self._height_px),
+            )
             x += step
         y = 0.0
         while y <= self.world_h + 1e-6:
-            pygame.draw.line(surf, (45, 70, 110), (0, self.sy(y)), (self.sx(self.world_w), self.sy(y)))
+            py = self.sy(y)
+            pygame.draw.line(
+                surf,
+                (45, 70, 110),
+                (0, py),
+                (self._width_px, py),
+            )
             y += step
+
+    def _draw_goals(self, surf) -> None:
+        if not HAS_PYGAME:
+            return
+        goal_colors = [
+            (240, 200, 80),
+            (120, 220, 160),
+            (230, 120, 200),
+            (180, 220, 240),
+        ]
+        outline = (25, 25, 25)
+        radius = 6
+        for boat, color in zip(self.ships, goal_colors):
+            if boat.goal_x is None or boat.goal_y is None:
+                continue
+            gx = self.sx(boat.goal_x)
+            gy = self.sy(boat.goal_y)
+            pygame.draw.circle(surf, color, (gx, gy), radius)
+            pygame.draw.circle(surf, outline, (gx, gy), radius, 2)
 
     def _draw_trails(self, surf) -> None:
         if not self.cfg.show_trails or not HAS_PYGAME:
@@ -249,12 +281,13 @@ class CrossingScenarioEnv:
         pygame.draw.rect(
             surf,
             (180, 180, 200),
-            (0, 0, self.sx(self.world_w), self.sy(self.world_h)),
+            (0, 0, self._width_px, self._height_px),
             2,
         )
 
         self._draw_grid(surf)
         self._draw_crossing_marker(surf)
+        self._draw_goals(surf)
 
         for trace, boat in zip(self._traces, self.ships):
             trace.append((self.sx(boat.x), self.sy(boat.y)))
