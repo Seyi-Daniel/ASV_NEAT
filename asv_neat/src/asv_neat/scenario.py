@@ -99,9 +99,27 @@ def compute_crossing_geometry(angle_deg: float, request: ScenarioRequest) -> Cro
         goal=(crossing_point[0] + goal_offset, crossing_point[1]),
     )
 
-    port_angle_rad = math.radians(360.0 - angle_deg)
-    stand_x = agent.x + approach * math.cos(port_angle_rad)
-    stand_y = agent.y + approach * math.sin(port_angle_rad)
+    bearing_rad = math.radians(angle_deg)
+    dir_x = math.cos(bearing_rad)
+    dir_y = -math.sin(bearing_rad)
+
+    stand_x = agent.x + approach * dir_x
+    stand_y = agent.y + approach * dir_y
+
+    distance_to_crossing = math.hypot(
+        stand_x - crossing_point[0], stand_y - crossing_point[1]
+    )
+    min_cross_distance = approach
+    if distance_to_crossing < min_cross_distance:
+        sin_bearing = math.sin(bearing_rad)
+        term = min_cross_distance**2 - (approach * sin_bearing) ** 2
+        if term < 0.0:
+            term = 0.0
+        adjusted_r = approach * math.cos(bearing_rad) + math.sqrt(term)
+        if adjusted_r > approach:
+            stand_x = agent.x + adjusted_r * dir_x
+            stand_y = agent.y + adjusted_r * dir_y
+
     heading_rad = math.atan2(crossing_point[1] - stand_y, crossing_point[0] - stand_x)
     heading_deg = (math.degrees(heading_rad) + 360.0) % 360.0
     goal_x = crossing_point[0] + goal_offset * math.cos(heading_rad)
