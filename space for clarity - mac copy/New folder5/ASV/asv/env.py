@@ -1,0 +1,295 @@
+"""Simplified environment for rendering deterministic crossing scenarios."""
+from __future__ import annotations
+
+import math
+from collections import deque
+from typing import Iterable, List, Optional, Sequence
+
+from .boat import Boat
+from .config import BoatParams, EnvConfig, TurnSessionConfig
+from .utils import angle_deg
+
+try:  # pragma: no cover - optional dependency
+    import pygame
+
+    HAS_PYGAME = True
+except Exception:  # pragma: no cover - optional dependency
+    HAS_PYGAME = False
+
+
+class CrossingScenarioEnv:
+    """Lightweight pygame environment tailored to the crossing scenario."""
+
+    def __init__(
+        self,
+        cfg: EnvConfig = EnvConfig(),
+        kin: BoatParams = BoatParams(),
+        tcfg: TurnSessionConfig = TurnSessionConfig(),
+    ) -> None:
+        self.cfg = cfg
+        self.kin = kin
+        self.tcfg = tcfg
+
+        self.world_w = float(cfg.world_w)
+        self.world_h = float(cfg.world_h)
+        self.ppm = float(cfg.pixels_per_meter)
+
+        self.ships: List[Boat] = []
+        self._traces: List[deque] = []
+        self._meta: dict = {}
+        self.time = 0.0
+        self.step_index = 0
+
+        self._screen = None
+        self._font = None
+        self._clock = None
+        self.hud_on = bool(cfg.show_hud)
+
+        if self.cfg.render and HAS_PYGAME:
+            self._setup_render()
+
+    # ------------------------------------------------------------------
+    # Setup and configuration helpers
+    # ------------------------------------------------------------------
+    def _setup_render(self) -> None:
+        if not HAS_PYGAME:
+            return
+        pygame.init()
+        width_px = max(320, int(round(self.world_w * self.ppm)))
+        height_px = max(320, int(round(self.world_h * self.ppm)))
+        self._screen = pygame.display.set_mode((width_px, height_px))
+        pygame.display.set_caption("Crossing Scenario Renderer")
+        self._font = pygame.font.Font(None, 18)
+        self._clock = pygame.time.Clock()
+
+    def enable_render(self) -> None:
+        if not self._screen and HAS_PYGAME:
+            self.cfg.render = True
+            self._setup_render()
+
+    def close(self) -> None:
+        if self._screen and HAS_PYGAME:
+            pygame.quit()
+        self._screen = None
+        self._font = None
+        self._clock = None
+
+    def sx(self, x_m: float) -> int:
+        return int(round(x_m * self.ppm))
+
+    def sy(self, y_m: float) -> int:
+        return int(round(y_m * self.ppm))
+
+    # ------------------------------------------------------------------
+    # Scenario management
+    # ------------------------------------------------------------------
+    def reset_from_states(
+        self,
+        states: Sequence[dict],
+        meta: Optional[dict] = None,
+    ) -> None:
+        """Replace the fleet with vessels described by ``states``."""
+
+        self.ships.clear()
+        self.time = 0.0
+        self.step_index = 0
+        self._meta = dict(meta or {})
+
+        self._traces = [deque(maxlen=1200) for _ in states]
+        for idx, spec in enumerate(states):
+            goal = spec.get("goal")
+            if goal is None:
+                gx = spec.get("goal_x")
+                gy = spec.get("goal_y")
+                if gx is not None and gy is not None:
+                    goal = (gx, gy)
+            boat = Boat(
+                boat_id=idx,
+                x=float(spec["x"]),
+                y=float(spec["y"]),
+                heading=float(spec["heading"]),
+                speed=float(spec.get("speed", 0.0)),
+                kin=self.kin,
+                tcfg=self.tcfg,
+                goal=goal,
+            )
+            self.ships.append(boat)
+
+    # ------------------------------------------------------------------
+    # Simulation loop
+    # ------------------------------------------------------------------
+    def step(self, actions: Optional[Sequence[Optional[int]]] = None) -> None:
+        if not self.ships:
+            return
+
+        if actions is None:
+            actions = [None] * len(self.ships)
+
+        dt = float(self.cfg.dt)
+        substeps = max(1, int(self.cfg.substeps))
+        h = dt / substeps
+
+        for _ in range(substeps):
+            for boat, action in zip(self.ships, actions):
+                if action is not None:
+                    boat.apply_action(int(action))
+            for boat in self.ships:
+                boat.integrate(h)
+            self.time += h
+        self.step_index += 1
+
+    # ------------------------------------------------------------------
+    # Rendering
+    # ------------------------------------------------------------------
+    def _handle_events(self) -> None:
+        if not HAS_PYGAME:
+            return
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                raise SystemExit
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_h:
+                    self.hud_on = not self.hud_on
+                elif event.key == pygame.K_g:
+                    self.cfg.show_grid = not self.cfg.show_grid
+                elif event.key == pygame.K_t:
+                    self.cfg.show_trails = not self.cfg.show_trails
+                elif event.key == pygame.K_ESCAPE:
+                    pygame.quit()
+                    raise SystemExit
+
+    def _draw_ship(self, surf, boat: Boat, color) -> None:
+        if not HAS_PYGAME:
+            return
+        Lm, Wm = self.kin.length, self.kin.width
+        verts_local = [(+0.5 * Lm, 0.0), (-0.5 * Lm, -0.5 * Wm), (-0.5 * Lm, +0.5 * Wm)]
+        ch, sh = math.cos(boat.h), math.sin(boat.h)
+        pts = []
+        for vx_m, vy_m in verts_local:
+            wx = boat.x + vx_m * ch - vy_m * sh
+            wy = boat.y + vx_m * sh + vy_m * ch
+            pts.append((self.sx(wx), self.sy(wy)))
+        pygame.draw.polygon(surf, color, pts)
+        radius = max(1, int(round(0.5 * math.hypot(Lm, Wm) * self.ppm)))
+        pygame.draw.circle(surf, (255, 255, 255), (self.sx(boat.x), self.sy(boat.y)), radius, 1)
+        if self._font:
+            label = self._font.render(str(boat.id), True, (255, 255, 255))
+            surf.blit(label, (self.sx(boat.x) + 8, self.sy(boat.y) - 8))
+
+    def _draw_crossing_marker(self, surf) -> None:
+        if not HAS_PYGAME:
+            return
+        cx = float(self._meta.get("cross_x", self.world_w / 2.0))
+        cy = float(self._meta.get("cross_y", self.world_h / 2.0))
+        px = self.sx(cx)
+        py = self.sy(cy)
+        pygame.draw.line(surf, (255, 230, 120), (px - 10, py), (px + 10, py), 2)
+        pygame.draw.line(surf, (255, 230, 120), (px, py - 10), (px, py + 10), 2)
+
+    def _draw_grid(self, surf) -> None:
+        if not self.cfg.show_grid or not HAS_PYGAME:
+            return
+        step = 40.0
+        x = 0.0
+        while x <= self.world_w + 1e-6:
+            pygame.draw.line(surf, (45, 70, 110), (self.sx(x), 0), (self.sx(x), self.sy(self.world_h)))
+            x += step
+        y = 0.0
+        while y <= self.world_h + 1e-6:
+            pygame.draw.line(surf, (45, 70, 110), (0, self.sy(y)), (self.sx(self.world_w), self.sy(y)))
+            y += step
+
+    def _draw_trails(self, surf) -> None:
+        if not self.cfg.show_trails or not HAS_PYGAME:
+            return
+        for trace in self._traces:
+            if len(trace) >= 2:
+                pygame.draw.lines(surf, (220, 220, 220), False, list(trace), 1)
+
+    def _draw_hud(self, surf) -> None:
+        if not HAS_PYGAME or not self.hud_on or not self._font:
+            return
+        pad = 8
+        line_spacing = 20
+        fps = self._clock.get_fps() if self._clock else 0.0
+
+        lines = [
+            f"FPS {fps:5.1f}   step {self.step_index}   t {self.time:6.2f}s",
+        ]
+        bearing = self._meta.get("bearing")
+        if bearing is not None:
+            lines.append(f"Requested stand-on bearing: {bearing:6.2f}°")
+        if self.ships:
+            agent = self.ships[0]
+            stand_on = self.ships[1] if len(self.ships) > 1 else None
+            lines.append(
+                f"Agent spd {agent.u:4.1f} m/s  hdg {angle_deg(agent.h):6.1f}°"
+            )
+            if stand_on:
+                lines.append(
+                    f"Stand-on spd {stand_on.u:4.1f} m/s  hdg {angle_deg(stand_on.h):6.1f}°"
+                )
+
+        width = max(self._font.size(text)[0] for text in lines) + 2 * pad
+        height = len(lines) * line_spacing + 2 * pad
+        panel = pygame.Surface((width, height), pygame.SRCALPHA)
+        panel.fill((0, 0, 0, 150))
+        for idx, text in enumerate(lines):
+            img = self._font.render(text, True, (235, 235, 235))
+            panel.blit(img, (pad, pad + idx * line_spacing))
+        surf.blit(panel, (10, 10))
+
+    def render(self) -> None:
+        if not self._screen:
+            return
+        self._handle_events()
+        surf = self._screen
+        surf.fill((15, 40, 70))
+        pygame.draw.rect(
+            surf,
+            (180, 180, 200),
+            (0, 0, self.sx(self.world_w), self.sy(self.world_h)),
+            2,
+        )
+
+        self._draw_grid(surf)
+        self._draw_crossing_marker(surf)
+
+        for trace, boat in zip(self._traces, self.ships):
+            trace.append((self.sx(boat.x), self.sy(boat.y)))
+
+        self._draw_trails(surf)
+
+        colors = [(90, 160, 255), (70, 200, 120), (230, 120, 90), (200, 200, 80)]
+        for boat, color in zip(self.ships, colors):
+            self._draw_ship(surf, boat, color)
+
+        self._draw_hud(surf)
+        pygame.display.flip()
+        if self._clock:
+            self._clock.tick(60)
+
+    # ------------------------------------------------------------------
+    # Convenience helpers
+    # ------------------------------------------------------------------
+    def snapshot(self) -> List[dict]:
+        """Return a copy of the observable state for each vessel."""
+
+        return [boat.snapshot() for boat in self.ships]
+
+    def run_scenario(
+        self,
+        steps: int,
+        actions: Optional[Iterable[Sequence[Optional[int]]]] = None,
+    ) -> None:
+        """Advance the simulation for ``steps`` frames, rendering each one."""
+
+        if actions is None:
+            actions_iter = (None for _ in range(steps))
+        else:
+            actions_iter = iter(actions)
+
+        for step_actions in actions_iter:
+            self.step(step_actions)
+            self.render()
