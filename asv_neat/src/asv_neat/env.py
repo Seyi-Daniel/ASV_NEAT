@@ -286,7 +286,6 @@ class CrossingScenarioEnv:
         )
 
         self._draw_grid(surf)
-        self._draw_crossing_marker(surf)
         self._draw_goals(surf)
 
         for trace, boat in zip(self._traces, self.ships):
