@@ -6,12 +6,21 @@ from dataclasses import dataclass
 from typing import Iterable, Iterator, Optional, Sequence, Tuple
 
 
+COLREGS_STARBOARD_MIN_DEG = 5.0
+COLREGS_STARBOARD_MAX_DEG = 112.5
+
+
+def _bearing_fraction(fraction: float) -> float:
+    span = COLREGS_STARBOARD_MAX_DEG - COLREGS_STARBOARD_MIN_DEG
+    return COLREGS_STARBOARD_MIN_DEG + span * fraction
+
+
 STAND_ON_BEARINGS_DEG: Tuple[float, ...] = (
-    5.0,
-    (5.0 + 112.5) / 2.0,
-    112.5,
-    5.0 + 0.25 * (112.5 - 5.0),
-    5.0 + 0.75 * (112.5 - 5.0),
+    COLREGS_STARBOARD_MIN_DEG,
+    _bearing_fraction(0.25),
+    _bearing_fraction(0.5),
+    _bearing_fraction(0.75),
+    COLREGS_STARBOARD_MAX_DEG,
 )
 
 
@@ -70,6 +79,7 @@ class ScenarioRequest:
     crossing_distance: float = 220.0
     agent_speed: float = 7.0
     stand_on_speed: float = 7.0
+    goal_extension: float = 220.0
 
 
 def compute_crossing_geometry(angle_deg: float, request: ScenarioRequest) -> CrossingScenario:
@@ -78,13 +88,15 @@ def compute_crossing_geometry(angle_deg: float, request: ScenarioRequest) -> Cro
     crossing_point = (0.0, 0.0)
     approach = request.crossing_distance
 
+    goal_offset = request.goal_extension
+
     agent = VesselState(
         name="give_way",
         x=-approach,
         y=0.0,
         heading_deg=0.0,
         speed=request.agent_speed,
-        goal=(crossing_point[0] + approach, crossing_point[1]),
+        goal=(crossing_point[0] + goal_offset, crossing_point[1]),
     )
 
     port_angle_rad = math.radians(360.0 - angle_deg)
@@ -92,8 +104,8 @@ def compute_crossing_geometry(angle_deg: float, request: ScenarioRequest) -> Cro
     stand_y = agent.y + approach * math.sin(port_angle_rad)
     heading_rad = math.atan2(crossing_point[1] - stand_y, crossing_point[0] - stand_x)
     heading_deg = (math.degrees(heading_rad) + 360.0) % 360.0
-    goal_x = crossing_point[0] + approach * math.cos(heading_rad)
-    goal_y = crossing_point[1] + approach * math.sin(heading_rad)
+    goal_x = crossing_point[0] + goal_offset * math.cos(heading_rad)
+    goal_y = crossing_point[1] + goal_offset * math.sin(heading_rad)
 
     stand_on = VesselState(
         name="stand_on",
@@ -151,21 +163,6 @@ def scenario_states_for_env(
     return states, meta
 
 
-def raw_agent_inputs(state: dict) -> Tuple[float, float, float, float, float, float]:
-    """Return the six raw values expected by the NEAT controller interface."""
-
-    goal_x = float(state.get("goal_x", 0.0))
-    goal_y = float(state.get("goal_y", 0.0))
-    return (
-        float(state["x"]),
-        float(state["y"]),
-        float(state.get("speed", 0.0)),
-        math.degrees(float(state["heading"])),
-        goal_x,
-        goal_y,
-    )
-
-
 __all__ = [
     "STAND_ON_BEARINGS_DEG",
     "VesselState",
@@ -174,6 +171,5 @@ __all__ = [
     "compute_crossing_geometry",
     "iter_scenarios",
     "scenario_states_for_env",
-    "raw_agent_inputs",
 ]
 
