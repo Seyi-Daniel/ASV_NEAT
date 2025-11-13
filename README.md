@@ -1,19 +1,20 @@
 # ASV NEAT — COLREGs Crossing Scenario
 
 This repository hosts an experimental NEAT-Python implementation for training a
-give-way autonomous surface vessel (ASV) to resolve COLREGs-compliant crossing
+give-way autonomous surface vessel (ASV) to resolve COLREGs-compliant
 encounters. The codebase has been consolidated into the `asv_neat/` project,
 which cleanly separates three concerns:
 
-* **Scenario generation** – deterministic construction of the five COLREGs
-  crossing cases (5°, 25%, 50%, 75% and 112.5° starboard bearings) so the
-  stand-on vessel always lies within the rule-defined sector.
+* **Scenario generation** – deterministic construction of fifteen COLREGs
+  encounters (five each for crossing, head-on and overtaking) so the stand-on
+  vessel always lies within the rule-defined sector and the speed profiles can
+  be tuned per situation.
 * **Environment simulation** – a lightweight pygame-compatible integrator that
   applies chunked helm commands to simple boat dynamics while tracking both
   vessels’ goals.
 * **Evolutionary training** – NEAT-Python integration that evaluates every
-  genome across the five scenarios _in parallel_, aggregates the cost metrics
-  and feeds the resulting **minimisation** objective back to NEAT.
+  genome across the fifteen scenarios _in parallel_, aggregates the cost
+  metrics and feeds the resulting **minimisation** objective back to NEAT.
 
 The give-way vessel receives a 12-dimensional observation vector (position,
 heading, speed and goal coordinates for itself and the stand-on craft) and
@@ -68,7 +69,7 @@ Important groups include:
 | `boat_*`    | Hull geometry and surge acceleration/deceleration limits. |
 | `turn_*`    | Chunked helm session behaviour (degrees per command, rate, hysteresis). |
 | `env_*`     | Integration settings and render scaling. |
-| `scenario_*`| Crossing layout, vessel speeds and goal extension distances. |
+| `scenario_*`| Encounter layout (distance/goal extension) and per-scenario speed profiles. |
 | `feature_*` | Normalisation constants applied to the 12-element observation vector. |
 | `max_steps`, `step_cost`, `goal_bonus`, `collision_penalty`, `timeout_penalty`, `distance_cost`, `distance_normaliser` | Cost shaping terms for the minimisation objective. |
 | `tcpa_threshold`, `dcpa_threshold`, `angle_threshold_deg`, `wrong_action_penalty` | Continuous COLREGs violation penalties (per-step costs when the wrong turn is taken inside the window). |
@@ -86,7 +87,7 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
    python asv_neat/scripts/train.py --generations 100 --hp goal_bonus=-50
    ```
 
-   * Every genome is evaluated on all five scenarios using a thread pool so the
+   * Every genome is evaluated on all fifteen scenarios using a thread pool so the
      environment dynamics remain independent.
    * Fitness values are set to the **negative** average cost, meaning lower cost
      solutions yield higher NEAT fitness while respecting the minimisation
@@ -97,8 +98,8 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
 3. Optionally pickle the winner with `--save-winner path.pkl`.
 4. After evolution the script prints a scenario-by-scenario summary (steps,
    COLREGs penalty, collision status, average cost) and, if `--render` is used,
-   replays each encounter via pygame. Without `--render` the five summaries are
-   gathered in parallel so the evaluations finish together before printing.
+  replays each encounter via pygame. Without `--render` the fifteen summaries are
+  gathered in parallel so the evaluations finish together before printing.
 
 Checkpoints can be enabled with `--checkpoint-dir` and
 `--checkpoint-interval` to capture intermediate states during longer runs.
@@ -108,7 +109,9 @@ Checkpoints can be enabled with `--checkpoint-dir` and
 ## Scenario visualisation
 
 Use the helper script to inspect the deterministic encounters and render random
-helm/throttle sequences:
+helm/throttle sequences. By default every crossing, head-on and overtaking case
+is replayed in series, but you can focus on a specific family via
+`--scenario`:
 
 ```bash
 python asv_neat/scripts/crossing_scenario.py --render --duration 40 --seed 42
@@ -121,9 +124,11 @@ CLI flags accepted by the preview script:
 | `--render` | Enable the pygame viewer so that each scenario is visualised in sequence. |
 | `--duration <seconds>` | Number of simulated seconds to replay when `--render` is enabled (default `35`). |
 | `--seed <int>` | Seed for the random give-way policy that drives the placeholder helm/throttle inputs. |
+| `--scenario {all,crossing,head_on,overtaking}` | Limit the preview to a single encounter family (default `all`). |
 | `--hp NAME=VALUE` | Repeatable overrides for any hyperparameter exposed by `HyperParameters`. |
 
-Hyperparameters such as the crossing distance or vessel speeds can be adjusted
+Hyperparameters such as the encounter distances or the six per-scenario speed
+settings can be adjusted
 here too via `--hp` overrides, ensuring the preview matches the training
 configuration. During rendering the give-way and stand-on destinations are now
 drawn as colour-coded markers so you can confirm that each vessel has its own

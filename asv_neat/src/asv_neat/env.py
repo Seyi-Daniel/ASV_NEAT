@@ -249,9 +249,18 @@ class CrossingScenarioEnv:
         lines = [
             f"FPS {fps:5.1f}   step {self.step_index}   t {self.time:6.2f}s",
         ]
+        scenario_kind = self._meta.get("scenario_kind")
+        if scenario_kind:
+            lines.append(f"Scenario kind: {scenario_kind}")
         bearing = self._meta.get("bearing")
         if bearing is not None:
-            lines.append(f"Requested stand-on bearing: {bearing:6.2f}°")
+            frame = self._meta.get("bearing_frame", "agent")
+            if frame == "agent":
+                lines.append(f"Requested stand-on bearing: {bearing:6.2f}°")
+            else:
+                lines.append(
+                    f"Requested agent bearing (stand-on frame): {bearing:6.2f}°"
+                )
         if self.ships:
             agent = self.ships[0]
             stand_on = self.ships[1] if len(self.ships) > 1 else None

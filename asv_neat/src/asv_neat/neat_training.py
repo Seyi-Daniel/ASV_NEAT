@@ -15,10 +15,9 @@ from .config import BoatParams, EnvConfig, TurnSessionConfig
 from .env import CrossingScenarioEnv
 from .hyperparameters import HyperParameters
 from .scenario import (
-    STAND_ON_BEARINGS_DEG,
-    CrossingScenario,
+    EncounterScenario,
     ScenarioRequest,
-    iter_scenarios,
+    default_scenarios,
     scenario_states_for_env,
 )
 from .utils import euclidean_distance, goal_distance, relative_bearing_deg, tcpa_dcpa
@@ -73,7 +72,7 @@ def observation_vector(
 
 def simulate_episode(
     env: CrossingScenarioEnv,
-    scenario: CrossingScenario,
+    scenario: EncounterScenario,
     network: neat.nn.FeedForwardNetwork,
     params: HyperParameters,
     *,
@@ -210,7 +209,7 @@ def _make_env(cfg: EnvConfig, kin: BoatParams, turn: TurnSessionConfig) -> Cross
 def evaluate_individual(
     genome,
     config,
-    scenarios: Sequence[CrossingScenario],
+    scenarios: Sequence[EncounterScenario],
     env_cfg: EnvConfig,
     boat_params: BoatParams,
     turn_cfg: TurnSessionConfig,
@@ -218,7 +217,7 @@ def evaluate_individual(
 ) -> float:
     """Return the average cost accrued by ``genome`` over all scenarios."""
 
-    def run_single(scenario: CrossingScenario) -> EpisodeMetrics:
+    def run_single(scenario: EncounterScenario) -> EpisodeMetrics:
         local_network = neat.nn.FeedForwardNetwork.create(genome, config)
         env = _make_env(env_cfg, boat_params, turn_cfg)
         try:
@@ -236,7 +235,7 @@ def evaluate_individual(
 def evaluate_population(
     genomes,
     config,
-    scenarios: Sequence[CrossingScenario],
+    scenarios: Sequence[EncounterScenario],
     env_cfg: EnvConfig,
     boat_params: BoatParams,
     turn_cfg: TurnSessionConfig,
@@ -268,7 +267,7 @@ class TrainingResult:
 
 def train_population(
     config_path: Path,
-    scenarios: Sequence[CrossingScenario],
+    scenarios: Sequence[EncounterScenario],
     env_cfg: EnvConfig,
     boat_params: BoatParams,
     turn_cfg: TurnSessionConfig,
@@ -314,10 +313,10 @@ def train_population(
     return TrainingResult(winner=winner, config=neat_config, statistics=stats)
 
 
-def build_scenarios(request: ScenarioRequest) -> List[CrossingScenario]:
-    """Generate the five deterministic COLREGs-compliant crossing scenarios."""
+def build_scenarios(request: ScenarioRequest) -> List[EncounterScenario]:
+    """Generate the fifteen deterministic scenarios (crossing, head-on, overtaking)."""
 
-    return list(iter_scenarios(STAND_ON_BEARINGS_DEG, request))
+    return list(default_scenarios(request))
 
 
 __all__ = [

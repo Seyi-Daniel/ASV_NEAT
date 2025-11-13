@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inspect the deterministic COLREGs crossing scenarios used for training."""
+"""Inspect the deterministic COLREGs encounter scenarios used for training."""
 from __future__ import annotations
 
 import argparse
@@ -16,8 +16,10 @@ if str(SRC_ROOT) not in sys.path:
 from asv_neat import (  # noqa: E402
     BoatParams,
     CrossingScenarioEnv,
+    EncounterScenario,
     EnvConfig,
     HyperParameters,
+    ScenarioKind,
     ScenarioRequest,
     TurnSessionConfig,
     apply_cli_overrides,
@@ -56,6 +58,12 @@ def parse_args(hparams: HyperParameters) -> argparse.Namespace:
         help="Seed for the random give-way controller.",
     )
     parser.add_argument(
+        "--scenario",
+        choices=["all", "crossing", "head_on", "overtaking"],
+        default="all",
+        help="Select which encounter set to preview (default: all).",
+    )
+    parser.add_argument(
         "--hp",
         action="append",
         default=[],
@@ -79,12 +87,37 @@ def build_env_config(hparams: HyperParameters, *, render: bool) -> EnvConfig:
     )
 
 
-def print_scenario_descriptions(scenarios: Iterable, header: str) -> None:
+def print_scenario_descriptions(
+    scenarios: Iterable[EncounterScenario], header: str
+) -> None:
+    scenario_list = list(scenarios)
     print(header)
     print("=" * len(header))
-    for idx, scenario in enumerate(scenarios, start=1):
-        print(f"\nScenario {idx}:")
-        print(scenario.describe())
+    if not scenario_list:
+        print("\nNo scenarios match the current selection.")
+        return
+
+    grouped: dict[ScenarioKind, list[EncounterScenario]] = {}
+    for scenario in scenario_list:
+        grouped.setdefault(scenario.kind, []).append(scenario)
+
+    for kind in ScenarioKind:
+        items = grouped.get(kind)
+        if not items:
+            continue
+        kind_title = kind.value.replace("_", " ").title()
+        for idx, scenario in enumerate(items, start=1):
+            print(f"\n{kind_title} scenario {idx}:")
+            print(scenario.describe())
+
+
+def format_scenario_heading(idx: int, scenario: EncounterScenario) -> str:
+    frame = "stand-on" if scenario.bearing_frame == "agent" else "agent (stand-on frame)"
+    kind_title = scenario.kind.value.replace("_", " ").title()
+    return (
+        f"Scenario {idx} [{kind_title}, "
+        f"bearing {scenario.requested_bearing:6.2f}° ({frame})]"
+    )
 
 
 def main() -> None:
@@ -98,13 +131,24 @@ def main() -> None:
 
     scenario_request = ScenarioRequest(
         crossing_distance=hparams.scenario_crossing_distance,
-        agent_speed=hparams.scenario_agent_speed,
-        stand_on_speed=hparams.scenario_stand_on_speed,
         goal_extension=hparams.scenario_goal_extension,
+        crossing_agent_speed=hparams.scenario_crossing_agent_speed,
+        crossing_stand_on_speed=hparams.scenario_crossing_stand_on_speed,
+        head_on_agent_speed=hparams.scenario_head_on_agent_speed,
+        head_on_stand_on_speed=hparams.scenario_head_on_stand_on_speed,
+        overtaking_agent_speed=hparams.scenario_overtaking_agent_speed,
+        overtaking_stand_on_speed=hparams.scenario_overtaking_stand_on_speed,
     )
     scenarios = build_scenarios(scenario_request)
 
-    print_scenario_descriptions(scenarios, "Deterministic crossing scenarios")
+    if args.scenario == "all":
+        header = "Deterministic encounter scenarios"
+    else:
+        selected_kind = ScenarioKind(args.scenario)
+        header = f"Deterministic {selected_kind.value} scenarios"
+        scenarios = [sc for sc in scenarios if sc.kind is selected_kind]
+
+    print_scenario_descriptions(scenarios, header)
 
     boat_params = BoatParams(
         length=hparams.boat_length,
@@ -122,7 +166,8 @@ def main() -> None:
             controller = RandomGiveWayPolicy(seed=args.seed)
             steps = max(1, int(round(args.duration / env_cfg.dt)))
             for idx, scenario in enumerate(scenarios, start=1):
-                print(f"\nRendering scenario {idx}: bearing {scenario.requested_bearing:6.2f}°")
+                heading = format_scenario_heading(idx, scenario)
+                print(f"\nRendering {heading}")
                 states, meta = scenario_states_for_env(env, scenario)
                 env.reset_from_states(states, meta=meta)
                 for _ in range(steps):

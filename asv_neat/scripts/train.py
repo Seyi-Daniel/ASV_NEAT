@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train the give-way vessel controller for the COLREGs crossing scenario."""
+"""Train the give-way vessel controller across the deterministic COLREGs encounters."""
 from __future__ import annotations
 
 import argparse
@@ -21,8 +21,8 @@ if str(SRC_ROOT) not in sys.path:
 
 from asv_neat import (  # noqa: E402
     BoatParams,
-    CrossingScenario,
     CrossingScenarioEnv,
+    EncounterScenario,
     EnvConfig,
     HyperParameters,
     ScenarioRequest,
@@ -136,15 +136,19 @@ def build_env_config(hparams: HyperParameters, *, render: bool) -> EnvConfig:
 def build_scenario_request(hparams: HyperParameters) -> ScenarioRequest:
     return ScenarioRequest(
         crossing_distance=hparams.scenario_crossing_distance,
-        agent_speed=hparams.scenario_agent_speed,
-        stand_on_speed=hparams.scenario_stand_on_speed,
         goal_extension=hparams.scenario_goal_extension,
+        crossing_agent_speed=hparams.scenario_crossing_agent_speed,
+        crossing_stand_on_speed=hparams.scenario_crossing_stand_on_speed,
+        head_on_agent_speed=hparams.scenario_head_on_agent_speed,
+        head_on_stand_on_speed=hparams.scenario_head_on_stand_on_speed,
+        overtaking_agent_speed=hparams.scenario_overtaking_agent_speed,
+        overtaking_stand_on_speed=hparams.scenario_overtaking_stand_on_speed,
     )
 
 
 def summarise_winner(
     result,
-    scenarios: Iterable[CrossingScenario],
+    scenarios: Iterable[EncounterScenario],
     hparams: HyperParameters,
     boat_params: BoatParams,
     turn_cfg: TurnSessionConfig,
@@ -155,6 +159,13 @@ def summarise_winner(
     scenario_list = list(scenarios)
     network = neat.nn.FeedForwardNetwork.create(result.winner, result.config)
     print("\nWinner evaluation summary:")
+
+    def _scenario_prefix(idx: int, scenario: EncounterScenario) -> str:
+        frame = "stand-on" if scenario.bearing_frame == "agent" else "agent (stand-on frame)"
+        return (
+            f"Scenario {idx} [{scenario.kind.value}, "
+            f"bearing {scenario.requested_bearing:6.2f}° ({frame})]"
+        )
 
     if render:
         env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
@@ -170,8 +181,9 @@ def summarise_winner(
                     if metrics.reached_goal
                     else "collision" if metrics.collided else "timeout"
                 )
+                prefix = _scenario_prefix(idx, scenario)
                 print(
-                    f"  Scenario {idx}: steps={metrics.steps:4d} status={status:8s} "
+                    f"  {prefix}: steps={metrics.steps:4d} status={status:8s} "
                     f"min_sep={metrics.min_separation:6.2f}m colregs={metrics.wrong_action_cost:6.2f} "
                     f"cost={cost:7.2f}"
                 )
@@ -180,7 +192,7 @@ def summarise_winner(
             env.close()
         return
 
-    def _evaluate(idx_scenario: int, scenario: CrossingScenario):
+    def _evaluate(idx_scenario: int, scenario: EncounterScenario):
         local_env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
         try:
             metrics = simulate_episode(local_env, scenario, network, hparams, render=False)
@@ -207,8 +219,10 @@ def summarise_winner(
     total_cost = 0.0
     for idx, metrics, cost, status in results:
         total_cost += cost
+        scenario = scenario_list[idx - 1]
+        prefix = _scenario_prefix(idx, scenario)
         print(
-            f"  Scenario {idx}: steps={metrics.steps:4d} status={status:8s} "
+            f"  {prefix}: steps={metrics.steps:4d} status={status:8s} "
             f"min_sep={metrics.min_separation:6.2f}m colregs={metrics.wrong_action_cost:6.2f} "
             f"cost={cost:7.2f}"
         )
