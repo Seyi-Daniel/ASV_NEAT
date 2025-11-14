@@ -14,11 +14,18 @@ from .neat_training import (
     train_population,
 )
 from .scenario import (
+    ScenarioKind,
     STAND_ON_BEARINGS_DEG,
-    CrossingScenario,
+    CROSSING_BEARINGS_DEG,
+    HEAD_ON_BEARINGS_DEG,
+    OVERTAKING_BEARINGS_DEG,
+    EncounterScenario,
     ScenarioRequest,
     compute_crossing_geometry,
+    compute_head_on_geometry,
+    compute_overtaking_geometry,
     iter_scenarios,
+    default_scenarios,
     scenario_states_for_env,
 )
 
@@ -37,10 +44,17 @@ __all__ = [
     "evaluate_population",
     "simulate_episode",
     "train_population",
+    "ScenarioKind",
     "STAND_ON_BEARINGS_DEG",
-    "CrossingScenario",
+    "CROSSING_BEARINGS_DEG",
+    "HEAD_ON_BEARINGS_DEG",
+    "OVERTAKING_BEARINGS_DEG",
+    "EncounterScenario",
     "ScenarioRequest",
     "compute_crossing_geometry",
+    "compute_head_on_geometry",
+    "compute_overtaking_geometry",
     "iter_scenarios",
+    "default_scenarios",
     "scenario_states_for_env",
 ]

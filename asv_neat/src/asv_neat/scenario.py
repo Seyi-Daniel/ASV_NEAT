@@ -1,13 +1,26 @@
-"""Geometry helpers for the deterministic crossing scenarios."""
+"""Geometry helpers for deterministic COLREGs encounter scenarios."""
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Optional, Sequence, Tuple
+from enum import Enum
+from typing import Callable, Dict, Iterable, Iterator, Optional, Sequence, Tuple
+
+
+class ScenarioKind(str, Enum):
+    """Enumeration of supported encounter geometries."""
+
+    CROSSING = "crossing"
+    HEAD_ON = "head_on"
+    OVERTAKING = "overtaking"
 
 
 COLREGS_STARBOARD_MIN_DEG = 5.0
 COLREGS_STARBOARD_MAX_DEG = 112.5
+COLREGS_HEAD_ON_MIN_DEG = 355.0
+COLREGS_HEAD_ON_MAX_DEG = 5.0
+COLREGS_OVERTAKING_MIN_DEG = 112.5
+COLREGS_OVERTAKING_MAX_DEG = 247.5
 
 
 def _bearing_fraction(fraction: float) -> float:
@@ -15,13 +28,49 @@ def _bearing_fraction(fraction: float) -> float:
     return COLREGS_STARBOARD_MIN_DEG + span * fraction
 
 
-STAND_ON_BEARINGS_DEG: Tuple[float, ...] = (
+def _wrapped_bearing_fraction(
+    start_deg: float, end_deg: float, fraction: float
+) -> float:
+    """Linear interpolation that correctly handles wrap-around at 360°."""
+
+    start = start_deg % 360.0
+    end = end_deg % 360.0
+    if math.isclose(start, end):
+        return start
+
+    if start < end:
+        span = end - start
+        return (start + span * fraction) % 360.0
+
+    # Wrap-around (e.g. 355° → 5°)
+    span = (360.0 - start) + end
+    value = start + span * fraction
+    return value % 360.0
+
+
+CROSSING_BEARINGS_DEG: Tuple[float, ...] = (
     COLREGS_STARBOARD_MIN_DEG,
     _bearing_fraction(0.25),
     _bearing_fraction(0.5),
     _bearing_fraction(0.75),
     COLREGS_STARBOARD_MAX_DEG,
 )
+
+HEAD_ON_BEARINGS_DEG: Tuple[float, ...] = tuple(
+    _wrapped_bearing_fraction(
+        COLREGS_HEAD_ON_MIN_DEG, COLREGS_HEAD_ON_MAX_DEG, fraction
+    )
+    for fraction in (0.0, 0.25, 0.5, 0.75, 1.0)
+)
+
+OVERTAKING_BEARINGS_DEG: Tuple[float, ...] = tuple(
+    COLREGS_OVERTAKING_MIN_DEG
+    + (COLREGS_OVERTAKING_MAX_DEG - COLREGS_OVERTAKING_MIN_DEG) * fraction
+    for fraction in (0.0, 0.25, 0.5, 0.75, 1.0)
+)
+
+# Backwards compatibility with earlier code that imported this name directly.
+STAND_ON_BEARINGS_DEG = CROSSING_BEARINGS_DEG
 
 
 @dataclass(frozen=True)
@@ -50,19 +99,29 @@ class VesselState:
 
 
 @dataclass(frozen=True)
-class CrossingScenario:
-    """Container for the initial geometry of a crossing encounter."""
+class EncounterScenario:
+    """Container for the initial geometry of an encounter scenario."""
 
+    kind: ScenarioKind
     agent: VesselState
     stand_on: VesselState
     crossing_point: Tuple[float, float]
     requested_bearing: float
+    bearing_frame: str
 
     def describe(self) -> str:
-        bearing = self.agent.bearing_to(self.stand_on)
+        if self.kind is ScenarioKind.OVERTAKING:
+            bearing = self.stand_on.bearing_to(self.agent)
+            bearing_label = "Agent bearing from stand-on"
+        else:
+            bearing = self.agent.bearing_to(self.stand_on)
+            bearing_label = "Stand-on bearing from agent"
+        requested_label = f"{bearing_label} (requested)"
+        realised_label = f"{bearing_label} (realised)"
         return (
-            f"Stand-on bearing (requested) : {self.requested_bearing:6.2f}°\n"
-            f"Stand-on bearing (realised)  : {bearing:6.2f}°\n"
+            f"Scenario type                : {self.kind.value}\n"
+            f"{requested_label:<30}: {self.requested_bearing:6.2f}°\n"
+            f"{realised_label:<30}: {bearing:6.2f}°\n"
             f"Agent position               : ({self.agent.x:7.2f}, {self.agent.y:7.2f}) m\n"
             f"Stand-on position            : ({self.stand_on.x:7.2f}, {self.stand_on.y:7.2f}) m\n"
             f"Agent heading                : {self.agent.heading_deg:6.2f}°\n"
@@ -74,15 +133,38 @@ class CrossingScenario:
 
 @dataclass(frozen=True)
 class ScenarioRequest:
-    """User-controllable parameters for the crossing scenario."""
+    """User-controllable parameters for all supported encounters."""
 
     crossing_distance: float = 220.0
-    agent_speed: float = 7.0
-    stand_on_speed: float = 7.0
     goal_extension: float = 220.0
+    crossing_agent_speed: float = 7.0
+    crossing_stand_on_speed: float = 7.0
+    head_on_agent_speed: float = 7.0
+    head_on_stand_on_speed: float = 7.0
+    overtaking_agent_speed: float = 9.0
+    overtaking_stand_on_speed: float = 6.0
+
+    def speeds_for(self, kind: ScenarioKind) -> Tuple[float, float]:
+        lookup: Dict[ScenarioKind, Tuple[float, float]] = {
+            ScenarioKind.CROSSING: (
+                self.crossing_agent_speed,
+                self.crossing_stand_on_speed,
+            ),
+            ScenarioKind.HEAD_ON: (
+                self.head_on_agent_speed,
+                self.head_on_stand_on_speed,
+            ),
+            ScenarioKind.OVERTAKING: (
+                self.overtaking_agent_speed,
+                self.overtaking_stand_on_speed,
+            ),
+        }
+        return lookup[kind]
 
 
-def compute_crossing_geometry(angle_deg: float, request: ScenarioRequest) -> CrossingScenario:
+def compute_crossing_geometry(
+    angle_deg: float, request: ScenarioRequest
+) -> EncounterScenario:
     """Create the crossing encounter for a single bearing value."""
 
     crossing_point = (0.0, 0.0)
@@ -90,12 +172,14 @@ def compute_crossing_geometry(angle_deg: float, request: ScenarioRequest) -> Cro
 
     goal_offset = request.goal_extension
 
+    agent_speed, stand_on_speed = request.speeds_for(ScenarioKind.CROSSING)
+
     agent = VesselState(
         name="give_way",
         x=-approach,
         y=0.0,
         heading_deg=0.0,
-        speed=request.agent_speed,
+        speed=agent_speed,
         goal=(crossing_point[0] + goal_offset, crossing_point[1]),
     )
 
@@ -130,27 +214,151 @@ def compute_crossing_geometry(angle_deg: float, request: ScenarioRequest) -> Cro
         x=stand_x,
         y=stand_y,
         heading_deg=heading_deg,
-        speed=request.stand_on_speed,
+        speed=stand_on_speed,
         goal=(goal_x, goal_y),
     )
 
-    return CrossingScenario(
+    return EncounterScenario(
+        kind=ScenarioKind.CROSSING,
         agent=agent,
         stand_on=stand_on,
         crossing_point=crossing_point,
         requested_bearing=angle_deg,
+        bearing_frame="agent",
     )
 
 
-def iter_scenarios(angles: Iterable[float], request: ScenarioRequest) -> Iterator[CrossingScenario]:
-    """Yield scenarios for each provided bearing value."""
+def compute_head_on_geometry(angle_deg: float, request: ScenarioRequest) -> EncounterScenario:
+    """Create a head-on encounter where both vessels approach the crossing point."""
+
+    crossing_point = (0.0, 0.0)
+    approach = request.crossing_distance
+    goal_offset = request.goal_extension
+    agent_speed, stand_on_speed = request.speeds_for(ScenarioKind.HEAD_ON)
+
+    agent = VesselState(
+        name="give_way",
+        x=-approach,
+        y=0.0,
+        heading_deg=0.0,
+        speed=agent_speed,
+        goal=(crossing_point[0] + goal_offset, crossing_point[1]),
+    )
+
+    bearing_rad = math.radians(angle_deg)
+    stand_x = crossing_point[0] + approach * math.cos(bearing_rad)
+    stand_y = crossing_point[1] + approach * math.sin(bearing_rad)
+
+    heading_rad = math.atan2(crossing_point[1] - stand_y, crossing_point[0] - stand_x)
+    heading_deg = (math.degrees(heading_rad) + 360.0) % 360.0
+    goal_x = crossing_point[0] + goal_offset * math.cos(heading_rad)
+    goal_y = crossing_point[1] + goal_offset * math.sin(heading_rad)
+
+    stand_on = VesselState(
+        name="stand_on",
+        x=stand_x,
+        y=stand_y,
+        heading_deg=heading_deg,
+        speed=stand_on_speed,
+        goal=(goal_x, goal_y),
+    )
+
+    return EncounterScenario(
+        kind=ScenarioKind.HEAD_ON,
+        agent=agent,
+        stand_on=stand_on,
+        crossing_point=crossing_point,
+        requested_bearing=angle_deg,
+        bearing_frame="agent",
+    )
+
+
+def compute_overtaking_geometry(
+    angle_deg: float, request: ScenarioRequest
+) -> EncounterScenario:
+    """Create an overtaking encounter with the give-way vessel closing from astern."""
+
+    crossing_point = (0.0, 0.0)
+    approach = request.crossing_distance
+    goal_offset = request.goal_extension
+    agent_speed, stand_on_speed = request.speeds_for(ScenarioKind.OVERTAKING)
+
+    separation = 0.75 * approach
+
+    agent = VesselState(
+        name="give_way",
+        x=-approach,
+        y=0.0,
+        heading_deg=0.0,
+        speed=agent_speed,
+        goal=(crossing_point[0] + goal_offset, crossing_point[1]),
+    )
+
+    rel_port_deg = (360.0 - angle_deg) % 360.0
+    rel_rad = math.radians(rel_port_deg)
+    x_rel = math.cos(rel_rad) * separation
+    y_rel = math.sin(rel_rad) * separation
+
+    stand_x = agent.x - x_rel
+    stand_y = agent.y - y_rel
+
+    stand_on = VesselState(
+        name="stand_on",
+        x=stand_x,
+        y=stand_y,
+        heading_deg=0.0,
+        speed=stand_on_speed,
+        goal=(crossing_point[0] + goal_offset, crossing_point[1]),
+    )
+
+    return EncounterScenario(
+        kind=ScenarioKind.OVERTAKING,
+        agent=agent,
+        stand_on=stand_on,
+        crossing_point=crossing_point,
+        requested_bearing=angle_deg,
+        bearing_frame="stand_on",
+    )
+
+
+_SCENARIO_BUILDERS: Dict[
+    ScenarioKind,
+    Tuple[Tuple[float, ...], Callable[[float, ScenarioRequest], EncounterScenario]],
+] = {
+    ScenarioKind.CROSSING: (CROSSING_BEARINGS_DEG, compute_crossing_geometry),
+    ScenarioKind.HEAD_ON: (HEAD_ON_BEARINGS_DEG, compute_head_on_geometry),
+    ScenarioKind.OVERTAKING: (OVERTAKING_BEARINGS_DEG, compute_overtaking_geometry),
+}
+
+
+def iter_scenarios(
+    angles: Iterable[float],
+    request: ScenarioRequest,
+    *,
+    kind: ScenarioKind = ScenarioKind.CROSSING,
+) -> Iterator[EncounterScenario]:
+    """Yield scenarios for each provided bearing value and encounter type."""
+
+    builder = {
+        ScenarioKind.CROSSING: compute_crossing_geometry,
+        ScenarioKind.HEAD_ON: compute_head_on_geometry,
+        ScenarioKind.OVERTAKING: compute_overtaking_geometry,
+    }[kind]
 
     for ang in angles:
-        yield compute_crossing_geometry(ang, request)
+        yield builder(float(ang), request)
+
+
+def default_scenarios(request: ScenarioRequest) -> Iterator[EncounterScenario]:
+    """Iterate over the predefined bearing sets for every encounter type."""
+
+    for kind, (angles, builder) in _SCENARIO_BUILDERS.items():
+        for angle in angles:
+            yield builder(angle, request)
 
 
 def scenario_states_for_env(
-    env, scenario: CrossingScenario
+    env, scenario: EncounterScenario
 ) -> Tuple[Sequence[dict], dict]:
     """Convert the dataclass description into environment-specific state dictionaries."""
 
@@ -175,6 +383,8 @@ def scenario_states_for_env(
     states: Sequence[dict] = [convert(scenario.agent), convert(scenario.stand_on)]
     meta = {
         "bearing": scenario.requested_bearing,
+        "bearing_frame": scenario.bearing_frame,
+        "scenario_kind": scenario.kind.value,
         "cross_x": cross_x,
         "cross_y": cross_y,
     }
@@ -182,12 +392,19 @@ def scenario_states_for_env(
 
 
 __all__ = [
+    "ScenarioKind",
     "STAND_ON_BEARINGS_DEG",
+    "CROSSING_BEARINGS_DEG",
+    "HEAD_ON_BEARINGS_DEG",
+    "OVERTAKING_BEARINGS_DEG",
     "VesselState",
-    "CrossingScenario",
+    "EncounterScenario",
     "ScenarioRequest",
     "compute_crossing_geometry",
+    "compute_head_on_geometry",
+    "compute_overtaking_geometry",
     "iter_scenarios",
+    "default_scenarios",
     "scenario_states_for_env",
 ]
 

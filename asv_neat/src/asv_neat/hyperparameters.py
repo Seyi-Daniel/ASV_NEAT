@@ -49,11 +49,39 @@ class HyperParameters:
         "Longitudinal distance between each vessel and the nominal crossing point (metres).",
         category="scenario",
     )
-    scenario_agent_speed: float = _hp(7.0, "Initial surge speed for the give-way vessel (m/s).", category="scenario")
-    scenario_stand_on_speed: float = _hp(7.0, "Initial surge speed for the stand-on vessel (m/s).", category="scenario")
     scenario_goal_extension: float = _hp(
         220.0,
         "Additional distance beyond the crossing point used when placing terminal goals (metres).",
+        category="scenario",
+    )
+    scenario_crossing_agent_speed: float = _hp(
+        7.0,
+        "Initial surge speed for the give-way vessel during crossing encounters (m/s).",
+        category="scenario",
+    )
+    scenario_crossing_stand_on_speed: float = _hp(
+        7.0,
+        "Initial surge speed for the stand-on vessel during crossing encounters (m/s).",
+        category="scenario",
+    )
+    scenario_head_on_agent_speed: float = _hp(
+        7.0,
+        "Initial surge speed for the give-way vessel during head-on encounters (m/s).",
+        category="scenario",
+    )
+    scenario_head_on_stand_on_speed: float = _hp(
+        7.0,
+        "Initial surge speed for the stand-on vessel during head-on encounters (m/s).",
+        category="scenario",
+    )
+    scenario_overtaking_agent_speed: float = _hp(
+        9.0,
+        "Initial surge speed for the give-way vessel during overtaking encounters (m/s).",
+        category="scenario",
+    )
+    scenario_overtaking_stand_on_speed: float = _hp(
+        6.0,
+        "Initial surge speed for the stand-on vessel during overtaking encounters (m/s).",
         category="scenario",
     )
 
