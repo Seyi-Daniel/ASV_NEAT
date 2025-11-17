@@ -132,12 +132,7 @@ class HyperParameters:
     )
     goal_progress_bonus: float = _hp(
         -1.2,
-        "Per-step bonus applied when an action reduces the distance to the goal (negative costs).",
-        category="cost",
-    )
-    heading_progress_bonus: float = _hp(
-        -0.4,
-        "Bonus applied when a helm command reduces the heading error relative to the goal (negative cost).",
+        "Per-step bonus applied when an action improves distance or heading alignment to the goal (negative costs).",
         category="cost",
     )
     heading_away_penalty: float = _hp(

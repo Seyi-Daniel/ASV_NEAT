@@ -40,7 +40,7 @@ class EpisodeMetrics:
     min_separation: float
     wrong_action_cost: float
     goal_progress_bonus: float
-    heading_progress_cost: float
+    heading_progress_penalty: float
 
 
 def _argmax(values: Sequence[float]) -> int:
@@ -97,7 +97,7 @@ def simulate_episode(
     min_sep = float("inf")
     wrong_action_cost = 0.0
     goal_progress_bonus = 0.0
-    heading_progress_cost = 0.0
+    heading_progress_penalty = 0.0
     steps = 0
 
     for step_idx in range(params.max_steps):
@@ -138,9 +138,9 @@ def simulate_episode(
         if prev_outside or new_outside:
             delta = heading_error - previous_heading_error
             if delta < 0.0:
-                heading_progress_cost += params.heading_progress_bonus
+                goal_progress_bonus += params.goal_progress_bonus
             elif delta > 0.0 and new_outside:
-                heading_progress_cost += params.heading_away_penalty
+                heading_progress_penalty += params.heading_away_penalty
 
         if stand_on_state is not None:
             sep = euclidean_distance(
@@ -160,7 +160,7 @@ def simulate_episode(
                     min_separation=min_sep,
                     wrong_action_cost=wrong_action_cost,
                     goal_progress_bonus=goal_progress_bonus,
-                    heading_progress_cost=heading_progress_cost,
+                    heading_progress_penalty=heading_progress_penalty,
                 )
 
             tcpa, dcpa = tcpa_dcpa(agent_state, stand_on_state)
@@ -182,7 +182,7 @@ def simulate_episode(
                 min_separation=min_sep,
                 wrong_action_cost=wrong_action_cost,
                 goal_progress_bonus=goal_progress_bonus,
-                heading_progress_cost=heading_progress_cost,
+                heading_progress_penalty=heading_progress_penalty,
             )
 
     snapshot = env.snapshot()
@@ -210,7 +210,7 @@ def simulate_episode(
         min_separation=min_sep,
         wrong_action_cost=wrong_action_cost,
         goal_progress_bonus=goal_progress_bonus,
-        heading_progress_cost=heading_progress_cost,
+        heading_progress_penalty=heading_progress_penalty,
     )
 
 
@@ -231,7 +231,7 @@ def episode_cost(metrics: EpisodeMetrics, params: HyperParameters) -> float:
 
     cost += metrics.wrong_action_cost
     cost += metrics.goal_progress_bonus
-    cost += metrics.heading_progress_cost
+    cost += metrics.heading_progress_penalty
     return cost
 
 
