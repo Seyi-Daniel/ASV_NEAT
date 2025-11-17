@@ -140,6 +140,7 @@ def simulate_episode(
                     final_distance=distance,
                     min_separation=min_sep,
                     wrong_action_cost=wrong_action_cost,
+                    goal_progress_bonus=goal_progress_bonus,
                 )
 
             tcpa, dcpa = tcpa_dcpa(agent_state, stand_on_state)
