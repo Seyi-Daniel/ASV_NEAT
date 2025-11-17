@@ -135,6 +135,21 @@ class HyperParameters:
         "Per-step bonus applied when an action reduces the distance to the goal (negative costs).",
         category="cost",
     )
+    heading_progress_bonus: float = _hp(
+        -0.4,
+        "Bonus applied when a helm command reduces the heading error relative to the goal (negative cost).",
+        category="cost",
+    )
+    heading_away_penalty: float = _hp(
+        0.5,
+        "Penalty applied when a helm command increases the heading error beyond the tolerance band.",
+        category="cost",
+    )
+    heading_alignment_threshold_deg: float = _hp(
+        12.0,
+        "Heading error tolerance inside which no heading-based shaping is applied (degrees).",
+        category="cost",
+    )
 
     # COLREGs shaping ---------------------------------------------------------------
     tcpa_threshold: float = _hp(
