@@ -33,6 +33,7 @@ class EpisodeMetrics:
     final_distance: float
     min_separation: float
     wrong_action_cost: float
+    goal_progress_bonus: float
 
 
 def _argmax(values: Sequence[float]) -> int:
@@ -88,6 +89,7 @@ def simulate_episode(
 
     min_sep = float("inf")
     wrong_action_cost = 0.0
+    goal_progress_bonus = 0.0
     steps = 0
 
     for step_idx in range(params.max_steps):
@@ -97,6 +99,7 @@ def simulate_episode(
 
         agent_state = snapshot[0]
         stand_on_state = snapshot[1] if len(snapshot) > 1 else snapshot[0]
+        previous_distance = goal_distance(agent_state)
 
         features = observation_vector(agent_state, stand_on_state, params)
         outputs = network.activate(features)
@@ -116,6 +119,9 @@ def simulate_episode(
         stand_on_state = snapshot[1] if len(snapshot) > 1 else None
 
         distance = goal_distance(agent_state)
+
+        if distance < previous_distance:
+            goal_progress_bonus += params.goal_progress_bonus
 
         if stand_on_state is not None:
             sep = euclidean_distance(
@@ -154,6 +160,7 @@ def simulate_episode(
                 final_distance=distance,
                 min_separation=min_sep,
                 wrong_action_cost=wrong_action_cost,
+                goal_progress_bonus=goal_progress_bonus,
             )
 
     snapshot = env.snapshot()
@@ -180,6 +187,7 @@ def simulate_episode(
         final_distance=distance,
         min_separation=min_sep,
         wrong_action_cost=wrong_action_cost,
+        goal_progress_bonus=goal_progress_bonus,
     )
 
 
@@ -199,6 +207,7 @@ def episode_cost(metrics: EpisodeMetrics, params: HyperParameters) -> float:
         cost += params.collision_penalty
 
     cost += metrics.wrong_action_cost
+    cost += metrics.goal_progress_bonus
     return cost
 
 

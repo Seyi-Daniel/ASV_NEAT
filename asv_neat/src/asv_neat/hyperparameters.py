@@ -130,6 +130,11 @@ class HyperParameters:
         "Normalisation constant used when converting remaining distance to a cost contribution.",
         category="cost",
     )
+    goal_progress_bonus: float = _hp(
+        -1.2,
+        "Per-step bonus applied when an action reduces the distance to the goal (negative costs).",
+        category="cost",
+    )
 
     # COLREGs shaping ---------------------------------------------------------------
     tcpa_threshold: float = _hp(
