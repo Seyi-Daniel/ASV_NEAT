@@ -136,6 +136,10 @@ def main(argv: Optional[list[str]] = None) -> None:
         for name, value, help_text in hparams.iter_documentation():
             description = help_text or ""
             print(f"  {name} = {value!r}\n      {description}")
+        print(
+            "\nScenario-specific overrides can be provided by prefixing the name with "
+            "'crossing.', 'head_on.' or 'overtaking.' (e.g. --hp head_on.goal_bonus=-60)."
+        )
         return
 
     try:

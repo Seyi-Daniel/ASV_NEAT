@@ -5,6 +5,8 @@ import dataclasses
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, Tuple
 
+from .scenario import ScenarioKind
+
 
 def _hp(
     default: Any,
@@ -17,6 +19,9 @@ def _hp(
     if alias is not None:
         metadata["alias"] = alias
     return field(default=default, metadata=metadata)
+
+
+SCENARIO_SCOPE_NAMES = tuple(kind.value for kind in ScenarioKind)
 
 
 @dataclass
@@ -153,10 +158,19 @@ class HyperParameters:
         category="colregs",
     )
 
+    scenario_overrides: Dict[str, Dict[str, Any]] = field(
+        default_factory=dict, repr=False, metadata={"hidden": True}
+    )
+
     def as_dict(self) -> Dict[str, Any]:
         """Return a shallow dictionary of hyperparameter names and values."""
 
-        return {field.name: getattr(self, field.name) for field in dataclasses.fields(self)}
+        values: Dict[str, Any] = {}
+        for field in dataclasses.fields(self):
+            if field.metadata.get("hidden"):
+                continue
+            values[field.name] = getattr(self, field.name)
+        return values
 
     def update_from_items(self, overrides: Dict[str, Any]) -> None:
         """Mutate this instance according to ``overrides`` (keys match attribute names)."""
@@ -170,9 +184,30 @@ class HyperParameters:
         """Yield ``(name, value, help)`` tuples describing each hyperparameter."""
 
         for field in dataclasses.fields(self):
+            if field.metadata.get("hidden"):
+                continue
             value = getattr(self, field.name)
             metadata = field.metadata or {}
             yield field.name, value, metadata.get("help", "")
+
+    def set_scenario_override(self, scope: str, name: str, value: Any) -> None:
+        """Record a scenario-specific override for ``name`` within ``scope``."""
+
+        scope = scope.lower()
+        if scope not in SCENARIO_SCOPE_NAMES:
+            raise KeyError(f"Unknown scenario scope '{scope}'.")
+        self.scenario_overrides.setdefault(scope, {})[name] = value
+
+    def resolve(self, name: str, *, kind: ScenarioKind | str | None = None) -> Any:
+        """Return ``name`` while honouring scenario-specific overrides."""
+
+        if kind is None:
+            return getattr(self, name)
+        scope = kind.value if isinstance(kind, ScenarioKind) else str(kind)
+        override = self.scenario_overrides.get(scope, {})
+        if name in override:
+            return override[name]
+        return getattr(self, name)
 
 
 def parse_hyperparameter_override(text: str) -> Tuple[str, Any]:
@@ -207,6 +242,13 @@ def apply_cli_overrides(hparams: HyperParameters, entries: Iterable[str]) -> Non
     updates: Dict[str, Any] = {}
     for item in entries:
         name, value = parse_hyperparameter_override(item)
+        scope, _, inner = name.partition(".")
+        scope_lower = scope.lower()
+        if inner and scope_lower in SCENARIO_SCOPE_NAMES:
+            if not hasattr(hparams, inner):
+                raise KeyError(f"Unknown hyperparameter '{inner}'.")
+            hparams.set_scenario_override(scope_lower, inner, value)
+            continue
         updates[name] = value
     if updates:
         hparams.update_from_items(updates)

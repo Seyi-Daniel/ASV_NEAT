@@ -76,6 +76,23 @@ Important groups include:
 
 Invalid overrides raise a friendly error so experiments remain reproducible.
 
+### Scenario-specific overrides
+
+When training all encounter families together you can give each one its own
+reward shaping or geometry tweaks. Prefix the hyperparameter with the scenario
+name to scope the override:
+
+```bash
+# Encourage faster arrivals in crossing encounters without affecting others
+python asv_neat/scripts/train.py --hp crossing.goal_bonus=-55
+
+# Apply a harsher collision penalty to overtaking scenarios
+python asv_neat/scripts/train.py --hp overtaking.collision_penalty=400
+```
+
+The prefixes `crossing.`, `head_on.` and `overtaking.` are supported, and they
+can be combined with regular overrides in the same command.
+
 ---
 
 ## Training workflow

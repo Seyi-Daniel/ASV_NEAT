@@ -116,6 +116,10 @@ def print_hyperparameters(hparams: HyperParameters) -> None:
     for name, value, help_text in hparams.iter_documentation():
         description = help_text or ""
         print(f"  {name} = {value!r}\n      {description}")
+    print(
+        "\nScenario-specific overrides can be provided by prefixing the name with "
+        "'crossing.', 'head_on.' or 'overtaking.' (e.g. --hp crossing.goal_bonus=-55)."
+    )
 
 
 def build_boat_params(hparams: HyperParameters) -> BoatParams:

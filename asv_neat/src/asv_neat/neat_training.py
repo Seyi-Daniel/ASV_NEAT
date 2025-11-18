@@ -91,7 +91,17 @@ def simulate_episode(
     wrong_action_cost = 0.0
     steps = 0
 
-    for step_idx in range(params.max_steps):
+    max_steps = int(params.resolve("max_steps", kind=scenario.kind))
+    collision_distance = float(params.resolve("collision_distance", kind=scenario.kind))
+    goal_tolerance = float(params.resolve("goal_tolerance", kind=scenario.kind))
+    tcpa_threshold = float(params.resolve("tcpa_threshold", kind=scenario.kind))
+    dcpa_threshold = float(params.resolve("dcpa_threshold", kind=scenario.kind))
+    angle_threshold = float(params.resolve("angle_threshold_deg", kind=scenario.kind))
+    wrong_action_penalty = float(
+        params.resolve("wrong_action_penalty", kind=scenario.kind)
+    )
+
+    for step_idx in range(max_steps):
         snapshot = env.snapshot()
         if not snapshot:
             break
@@ -127,7 +137,7 @@ def simulate_episode(
             )
             min_sep = min(min_sep, sep)
 
-            if sep <= params.collision_distance:
+            if sep <= collision_distance:
                 return EpisodeMetrics(
                     steps=steps,
                     reached_goal=False,
@@ -140,14 +150,14 @@ def simulate_episode(
             tcpa, dcpa = tcpa_dcpa(agent_state, stand_on_state)
             bearing = relative_bearing_deg(agent_state, stand_on_state)
             if (
-                0.0 <= tcpa <= params.tcpa_threshold
-                and dcpa <= params.dcpa_threshold
-                and bearing <= params.angle_threshold_deg
+                0.0 <= tcpa <= tcpa_threshold
+                and dcpa <= dcpa_threshold
+                and bearing <= angle_threshold
             ):
                 if helm != 1:
-                    wrong_action_cost += params.wrong_action_penalty
+                    wrong_action_cost += wrong_action_penalty
 
-        if distance <= params.goal_tolerance:
+        if distance <= goal_tolerance:
             return EpisodeMetrics(
                 steps=steps,
                 reached_goal=True,
@@ -175,7 +185,7 @@ def simulate_episode(
         distance = 0.0
 
     return EpisodeMetrics(
-        steps=max(steps, params.max_steps),
+        steps=max(steps, max_steps),
         reached_goal=False,
         collided=False,
         final_distance=distance,
@@ -184,20 +194,27 @@ def simulate_episode(
     )
 
 
-def episode_cost(metrics: EpisodeMetrics, params: HyperParameters) -> float:
+def episode_cost(
+    metrics: EpisodeMetrics, params: HyperParameters, kind: ScenarioKind
+) -> float:
     """Convert ``metrics`` into a scalar cost value (lower is better)."""
 
-    cost = params.step_cost * metrics.steps
+    step_cost = float(params.resolve("step_cost", kind=kind))
+    cost = step_cost * metrics.steps
 
     if metrics.reached_goal:
-        cost += params.goal_bonus
+        goal_bonus = float(params.resolve("goal_bonus", kind=kind))
+        cost += goal_bonus
     else:
-        cost += params.timeout_penalty
-        normaliser = max(1.0, params.distance_normaliser)
-        cost += params.distance_cost * (metrics.final_distance / normaliser)
+        timeout_penalty = float(params.resolve("timeout_penalty", kind=kind))
+        cost += timeout_penalty
+        normaliser = max(1.0, float(params.resolve("distance_normaliser", kind=kind)))
+        distance_cost = float(params.resolve("distance_cost", kind=kind))
+        cost += distance_cost * (metrics.final_distance / normaliser)
 
     if metrics.collided:
-        cost += params.collision_penalty
+        collision_penalty = float(params.resolve("collision_penalty", kind=kind))
+        cost += collision_penalty
 
     cost += metrics.wrong_action_cost
     return cost
@@ -218,19 +235,25 @@ def evaluate_individual(
 ) -> float:
     """Return the average cost accrued by ``genome`` over all scenarios."""
 
-    def run_single(scenario: EncounterScenario) -> EpisodeMetrics:
+    def run_single(
+        scenario: EncounterScenario,
+    ) -> tuple[EncounterScenario, EpisodeMetrics]:
         local_network = neat.nn.FeedForwardNetwork.create(genome, config)
         env = _make_env(env_cfg, boat_params, turn_cfg)
         try:
-            return simulate_episode(env, scenario, local_network, params)
+            metrics = simulate_episode(env, scenario, local_network, params)
+            return scenario, metrics
         finally:
             env.close()
 
     with ThreadPoolExecutor(max_workers=len(scenarios)) as executor:
-        metrics = list(executor.map(run_single, scenarios))
+        scenario_metrics = list(executor.map(run_single, scenarios))
 
-    total_cost = sum(episode_cost(item, params) for item in metrics)
-    return total_cost / len(metrics)
+    total_cost = sum(
+        episode_cost(metrics, params, scenario.kind)
+        for scenario, metrics in scenario_metrics
+    )
+    return total_cost / len(scenario_metrics)
 
 
 def evaluate_population(
@@ -355,7 +378,7 @@ def summarise_genome(
             total_cost = 0.0
             for idx, scenario in enumerate(scenario_list, start=1):
                 metrics = simulate_episode(env, scenario, network, params, render=True)
-                cost = episode_cost(metrics, params)
+                cost = episode_cost(metrics, params, scenario.kind)
                 total_cost += cost
                 status = (
                     "goal"
@@ -380,7 +403,7 @@ def summarise_genome(
             metrics = simulate_episode(local_env, scenario, network, params, render=False)
         finally:
             local_env.close()
-        cost = episode_cost(metrics, params)
+        cost = episode_cost(metrics, params, scenario.kind)
         status = (
             "goal"
             if metrics.reached_goal
