@@ -10,6 +10,7 @@ from .neat_training import (
     build_scenarios,
     episode_cost,
     evaluate_population,
+    summarise_genome,
     simulate_episode,
     train_population,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "build_scenarios",
     "episode_cost",
     "evaluate_population",
+    "summarise_genome",
     "simulate_episode",
     "train_population",
     "ScenarioKind",

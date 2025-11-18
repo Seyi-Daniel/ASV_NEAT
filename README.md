@@ -81,24 +81,31 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
 ## Training workflow
 
 1. Install `neat-python` (and `pygame` if rendering is desired).
-2. Launch training:
+2. Launch training (optionally scoping the encounter family):
 
    ```bash
-   python asv_neat/scripts/train.py --generations 100 --hp goal_bonus=-50
+   # Run only the crossing scenarios with a custom reward shaping profile
+   python asv_neat/scripts/train.py --scenario crossing --generations 100 --hp goal_bonus=-50
    ```
 
    * Every genome is evaluated on all fifteen scenarios using a thread pool so the
-     environment dynamics remain independent.
+     environment dynamics remain independent. Pass `--scenario head_on` or
+     `--scenario overtaking` to train against the five head-on or overtaking
+     encounters respectively, or keep the default `--scenario all` to evaluate the
+     complete 15-scenario suite.
    * Fitness values are set to the **negative** average cost, meaning lower cost
      solutions yield higher NEAT fitness while respecting the minimisation
      framing.
    * The default NEAT config (`configs/neat_crossing.cfg`) already expects 12
      inputs and nine outputs, matching the observation/action definitions.
 
-3. Optionally pickle the winner with `--save-winner path.pkl`.
+3. Winners are saved automatically under `artifacts/winners/<scenario>_winner.pkl`
+   (for example `artifacts/winners/crossing_winner.pkl`). Override the path with
+   `--save-winner custom.pkl` or disable the behaviour with
+   `--disable-auto-save`.
 4. After evolution the script prints a scenario-by-scenario summary (steps,
    COLREGs penalty, collision status, average cost) and, if `--render` is used,
-  replays each encounter via pygame. Without `--render` the fifteen summaries are
+   replays each encounter via pygame. Without `--render` the fifteen summaries are
   gathered in parallel so the evaluations finish together before printing.
 
 Checkpoints can be enabled with `--checkpoint-dir` and
@@ -133,6 +140,22 @@ here too via `--hp` overrides, ensuring the preview matches the training
 configuration. During rendering the give-way and stand-on destinations are now
 drawn as colour-coded markers so you can confirm that each vessel has its own
 goal beyond the shared crossing point.
+
+---
+
+## Model replay
+
+After training completes you can visualise any saved genome with the dedicated
+demo script. This avoids retraining and makes it easy to compare separate
+crossing/head-on/overtaking winners:
+
+```bash
+python asv_neat/scripts/demo.py --winner artifacts/winners/crossing_winner.pkl --scenario crossing --render
+```
+
+The CLI accepts the same hyperparameter overrides as the training script so the
+environment, reward shaping, and encounter geometry all match the settings used
+when the genome was produced.
 
 ---
 

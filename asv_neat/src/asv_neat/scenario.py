@@ -349,10 +349,18 @@ def iter_scenarios(
         yield builder(float(ang), request)
 
 
-def default_scenarios(request: ScenarioRequest) -> Iterator[EncounterScenario]:
+def default_scenarios(
+    request: ScenarioRequest, *, kinds: Iterable[ScenarioKind] | None = None
+) -> Iterator[EncounterScenario]:
     """Iterate over the predefined bearing sets for every encounter type."""
 
-    for kind, (angles, builder) in _SCENARIO_BUILDERS.items():
+    if kinds is None:
+        selected_kinds: Iterable[ScenarioKind] = _SCENARIO_BUILDERS.keys()
+    else:
+        selected_kinds = kinds
+
+    for kind in selected_kinds:
+        angles, builder = _SCENARIO_BUILDERS[kind]
         for angle in angles:
             yield builder(angle, request)
 
