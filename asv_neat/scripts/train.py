@@ -5,9 +5,8 @@ from __future__ import annotations
 import argparse
 import pickle
 import sys
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 try:  # pragma: no cover - optional dependency
     import neat
@@ -20,18 +19,19 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from asv_neat import (  # noqa: E402
-    BoatParams,
-    CrossingScenarioEnv,
-    EncounterScenario,
-    EnvConfig,
     HyperParameters,
-    ScenarioRequest,
-    TurnSessionConfig,
     apply_cli_overrides,
     build_scenarios,
-    episode_cost,
-    simulate_episode,
     train_population,
+)
+from asv_neat.cli_helpers import (  # noqa: E402
+    SCENARIO_KIND_CHOICES,
+    build_boat_params,
+    build_env_config,
+    build_scenario_request,
+    build_turn_config,
+    filter_scenarios_by_kind,
+    summarise_genome,
 )
 
 
@@ -79,6 +79,12 @@ def build_parser(hparams: HyperParameters) -> argparse.ArgumentParser:
         help="Enable pygame visualisation while summarising the winning genome.",
     )
     parser.add_argument(
+        "--scenario-kind",
+        choices=SCENARIO_KIND_CHOICES,
+        default="all",
+        help="Select which encounter family should be used for training.",
+    )
+    parser.add_argument(
         "--list-hyperparameters",
         action="store_true",
         help="List available hyperparameters and exit without training.",
@@ -100,135 +106,6 @@ def print_hyperparameters(hparams: HyperParameters) -> None:
         print(f"  {name} = {value!r}\n      {description}")
 
 
-def build_boat_params(hparams: HyperParameters) -> BoatParams:
-    return BoatParams(
-        length=hparams.boat_length,
-        width=hparams.boat_width,
-        max_speed=hparams.boat_max_speed,
-        min_speed=hparams.boat_min_speed,
-        accel_rate=hparams.boat_accel_rate,
-        decel_rate=hparams.boat_decel_rate,
-    )
-
-
-def build_turn_config(hparams: HyperParameters) -> TurnSessionConfig:
-    return TurnSessionConfig(
-        turn_deg=hparams.turn_chunk_deg,
-        turn_rate_degps=hparams.turn_rate_degps,
-        hysteresis_deg=hparams.turn_hysteresis_deg,
-    )
-
-
-def build_env_config(hparams: HyperParameters, *, render: bool) -> EnvConfig:
-    return EnvConfig(
-        world_w=hparams.env_world_w,
-        world_h=hparams.env_world_h,
-        dt=hparams.env_dt,
-        substeps=hparams.env_substeps,
-        render=render,
-        pixels_per_meter=hparams.env_pixels_per_meter,
-        show_grid=False,
-        show_trails=False,
-        show_hud=False,
-    )
-
-
-def build_scenario_request(hparams: HyperParameters) -> ScenarioRequest:
-    return ScenarioRequest(
-        crossing_distance=hparams.scenario_crossing_distance,
-        goal_extension=hparams.scenario_goal_extension,
-        crossing_agent_speed=hparams.scenario_crossing_agent_speed,
-        crossing_stand_on_speed=hparams.scenario_crossing_stand_on_speed,
-        head_on_agent_speed=hparams.scenario_head_on_agent_speed,
-        head_on_stand_on_speed=hparams.scenario_head_on_stand_on_speed,
-        overtaking_agent_speed=hparams.scenario_overtaking_agent_speed,
-        overtaking_stand_on_speed=hparams.scenario_overtaking_stand_on_speed,
-    )
-
-
-def summarise_winner(
-    result,
-    scenarios: Iterable[EncounterScenario],
-    hparams: HyperParameters,
-    boat_params: BoatParams,
-    turn_cfg: TurnSessionConfig,
-    env_cfg: EnvConfig,
-    *,
-    render: bool = False,
-) -> None:
-    scenario_list = list(scenarios)
-    network = neat.nn.FeedForwardNetwork.create(result.winner, result.config)
-    print("\nWinner evaluation summary:")
-
-    def _scenario_prefix(idx: int, scenario: EncounterScenario) -> str:
-        frame = "stand-on" if scenario.bearing_frame == "agent" else "agent (stand-on frame)"
-        return (
-            f"Scenario {idx} [{scenario.kind.value}, "
-            f"bearing {scenario.requested_bearing:6.2f}° ({frame})]"
-        )
-
-    if render:
-        env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
-        try:
-            env.enable_render()
-            total_cost = 0.0
-            for idx, scenario in enumerate(scenario_list, start=1):
-                metrics = simulate_episode(env, scenario, network, hparams, render=True)
-                cost = episode_cost(metrics, hparams)
-                total_cost += cost
-                status = (
-                    "goal"
-                    if metrics.reached_goal
-                    else "collision" if metrics.collided else "timeout"
-                )
-                prefix = _scenario_prefix(idx, scenario)
-                print(
-                    f"  {prefix}: steps={metrics.steps:4d} status={status:8s} "
-                    f"min_sep={metrics.min_separation:6.2f}m colregs={metrics.wrong_action_cost:6.2f} "
-                    f"cost={cost:7.2f}"
-                )
-            print(f"Average cost: {total_cost / len(scenario_list):.2f}")
-        finally:
-            env.close()
-        return
-
-    def _evaluate(idx_scenario: int, scenario: EncounterScenario):
-        local_env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
-        try:
-            metrics = simulate_episode(local_env, scenario, network, hparams, render=False)
-        finally:
-            local_env.close()
-        cost = episode_cost(metrics, hparams)
-        status = (
-            "goal"
-            if metrics.reached_goal
-            else "collision" if metrics.collided else "timeout"
-        )
-        return idx_scenario, metrics, cost, status
-
-    results = []
-    with ThreadPoolExecutor(max_workers=max(1, len(scenario_list))) as executor:
-        futures = [
-            executor.submit(_evaluate, idx, scenario)
-            for idx, scenario in enumerate(scenario_list, start=1)
-        ]
-        for fut in futures:
-            results.append(fut.result())
-
-    results.sort(key=lambda item: item[0])
-    total_cost = 0.0
-    for idx, metrics, cost, status in results:
-        total_cost += cost
-        scenario = scenario_list[idx - 1]
-        prefix = _scenario_prefix(idx, scenario)
-        print(
-            f"  {prefix}: steps={metrics.steps:4d} status={status:8s} "
-            f"min_sep={metrics.min_separation:6.2f}m colregs={metrics.wrong_action_cost:6.2f} "
-            f"cost={cost:7.2f}"
-        )
-    print(f"Average cost: {total_cost / len(results):.2f}")
-
-
 def main(argv: Optional[list[str]] = None) -> None:
     hparams = HyperParameters()
     parser = build_parser(hparams)
@@ -244,7 +121,11 @@ def main(argv: Optional[list[str]] = None) -> None:
         parser.error(str(exc))
 
     scenario_request = build_scenario_request(hparams)
-    scenarios = build_scenarios(scenario_request)
+    scenarios = filter_scenarios_by_kind(
+        build_scenarios(scenario_request), args.scenario_kind
+    )
+    if not scenarios:
+        parser.error("No scenarios available for the requested encounter kind.")
 
     boat_params = build_boat_params(hparams)
     turn_cfg = build_turn_config(hparams)
@@ -263,15 +144,27 @@ def main(argv: Optional[list[str]] = None) -> None:
         checkpoint_interval=args.checkpoint_interval,
     )
 
-    if args.save_winner is not None:
-        args.save_winner.parent.mkdir(parents=True, exist_ok=True)
-        with args.save_winner.open("wb") as fh:
+    winner_path = args.save_winner
+    auto_generated = False
+    if winner_path is None and args.render:
+        auto_generated = True
+        default_dir = PROJECT_ROOT / "winners"
+        default_dir.mkdir(parents=True, exist_ok=True)
+        winner_path = default_dir / f"{args.scenario_kind}_winner.pkl"
+
+    if winner_path is not None:
+        winner_path.parent.mkdir(parents=True, exist_ok=True)
+        with winner_path.open("wb") as fh:
             pickle.dump(result.winner, fh)
-        print(f"Saved winning genome to {args.save_winner}")
+        if auto_generated:
+            print(f"Saved winning genome to {winner_path} (auto-generated path)")
+        else:
+            print(f"Saved winning genome to {winner_path}")
 
     render_cfg = build_env_config(hparams, render=args.render)
-    summarise_winner(
-        result,
+    summarise_genome(
+        result.winner,
+        result.config,
         scenarios,
         hparams,
         boat_params,
