@@ -130,6 +130,16 @@ class HyperParameters:
         "Normalisation constant used when converting remaining distance to a cost contribution.",
         category="cost",
     )
+    goal_progress_bonus: float = _hp(
+        -1.2,
+        "Per-step shaping magnitude applied when an action improves goal distance/heading (negative) or moves away (positive).",
+        category="cost",
+    )
+    heading_alignment_threshold_deg: float = _hp(
+        12.0,
+        "Heading error tolerance inside which no heading-based shaping is applied (degrees).",
+        category="cost",
+    )
 
     # COLREGs shaping ---------------------------------------------------------------
     tcpa_threshold: float = _hp(

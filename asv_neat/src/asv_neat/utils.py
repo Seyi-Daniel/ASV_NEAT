@@ -37,6 +37,22 @@ def goal_distance(state: dict) -> float:
     return euclidean_distance(float(state["x"]), float(state["y"]), gx, gy)
 
 
+def heading_error_deg(state: dict) -> float:
+    """Absolute heading error between the vessel's course and the goal direction."""
+
+    gx = float(state.get("goal_x", state["x"]))
+    gy = float(state.get("goal_y", state["y"]))
+    x = float(state["x"])
+    y = float(state["y"])
+    dx = gx - x
+    dy = gy - y
+    if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
+        return 0.0
+    desired_heading = math.atan2(dy, dx)
+    current_heading = float(state["heading"])
+    return abs(math.degrees(wrap_pi(desired_heading - current_heading)))
+
+
 def tcpa_dcpa(agent: dict, stand_on: dict) -> Tuple[float, float]:
     """Compute time and distance to closest point of approach between two vessels."""
 

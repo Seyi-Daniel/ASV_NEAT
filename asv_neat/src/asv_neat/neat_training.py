@@ -20,7 +20,13 @@ from .scenario import (
     default_scenarios,
     scenario_states_for_env,
 )
-from .utils import euclidean_distance, goal_distance, relative_bearing_deg, tcpa_dcpa
+from .utils import (
+    euclidean_distance,
+    goal_distance,
+    heading_error_deg,
+    relative_bearing_deg,
+    tcpa_dcpa,
+)
 
 
 @dataclass
@@ -33,6 +39,7 @@ class EpisodeMetrics:
     final_distance: float
     min_separation: float
     wrong_action_cost: float
+    goal_progress_bonus: float
 
 
 def _argmax(values: Sequence[float]) -> int:
@@ -88,6 +95,7 @@ def simulate_episode(
 
     min_sep = float("inf")
     wrong_action_cost = 0.0
+    goal_progress_bonus = 0.0
     steps = 0
 
     for step_idx in range(params.max_steps):
@@ -97,6 +105,8 @@ def simulate_episode(
 
         agent_state = snapshot[0]
         stand_on_state = snapshot[1] if len(snapshot) > 1 else snapshot[0]
+        previous_distance = goal_distance(agent_state)
+        previous_heading_error = heading_error_deg(agent_state)
 
         features = observation_vector(agent_state, stand_on_state, params)
         outputs = network.activate(features)
@@ -116,6 +126,34 @@ def simulate_episode(
         stand_on_state = snapshot[1] if len(snapshot) > 1 else None
 
         distance = goal_distance(agent_state)
+        heading_error = heading_error_deg(agent_state)
+
+        distance_improved = distance < (previous_distance - 1e-6)
+        distance_regressed = distance > (previous_distance + 1e-6)
+
+        prev_outside = previous_heading_error > params.heading_alignment_threshold_deg
+        new_outside = heading_error > params.heading_alignment_threshold_deg
+        heading_delta = heading_error - previous_heading_error
+        heading_improved = heading_delta < 0.0 and (prev_outside or new_outside)
+        heading_regressed = heading_delta > 0.0 and new_outside
+
+        reward_step = False
+        penalty_step = False
+
+        if distance_improved and (heading_delta <= 0.0 or not new_outside or heading_improved):
+            reward_step = True
+        elif distance_regressed and (heading_regressed or new_outside):
+            penalty_step = True
+
+        if not reward_step and heading_improved:
+            reward_step = True
+        if not penalty_step and heading_regressed and not distance_improved:
+            penalty_step = True
+
+        if reward_step:
+            goal_progress_bonus += params.goal_progress_bonus
+        elif penalty_step:
+            goal_progress_bonus -= params.goal_progress_bonus
 
         if stand_on_state is not None:
             sep = euclidean_distance(
@@ -134,6 +172,7 @@ def simulate_episode(
                     final_distance=distance,
                     min_separation=min_sep,
                     wrong_action_cost=wrong_action_cost,
+                    goal_progress_bonus=goal_progress_bonus,
                 )
 
             tcpa, dcpa = tcpa_dcpa(agent_state, stand_on_state)
@@ -154,6 +193,7 @@ def simulate_episode(
                 final_distance=distance,
                 min_separation=min_sep,
                 wrong_action_cost=wrong_action_cost,
+                goal_progress_bonus=goal_progress_bonus,
             )
 
     snapshot = env.snapshot()
@@ -180,6 +220,7 @@ def simulate_episode(
         final_distance=distance,
         min_separation=min_sep,
         wrong_action_cost=wrong_action_cost,
+        goal_progress_bonus=goal_progress_bonus,
     )
 
 
@@ -199,6 +240,7 @@ def episode_cost(metrics: EpisodeMetrics, params: HyperParameters) -> float:
         cost += params.collision_penalty
 
     cost += metrics.wrong_action_cost
+    cost += metrics.goal_progress_bonus
     return cost
 
 
