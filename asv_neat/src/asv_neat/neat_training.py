@@ -6,7 +6,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence
 
 import neat
 
@@ -77,6 +77,11 @@ def observation_vector(
     return pack(agent) + pack(stand_on)
 
 
+TraceCallback = Callable[
+    [int, List[float], Sequence[float], int, dict, Optional[dict]], None
+]
+
+
 def simulate_episode(
     env: CrossingScenarioEnv,
     scenario: EncounterScenario,
@@ -84,6 +89,7 @@ def simulate_episode(
     params: HyperParameters,
     *,
     render: bool = False,
+    trace_callback: Optional[TraceCallback] = None,
 ) -> EpisodeMetrics:
     """Roll a network-controlled episode within ``env`` for ``scenario``."""
 
@@ -112,6 +118,16 @@ def simulate_episode(
         outputs = network.activate(features)
         action = _argmax(outputs)
         helm, _ = Boat.decode_action(action)
+
+        if trace_callback is not None:
+            trace_callback(
+                step_idx,
+                list(features),
+                list(outputs),
+                action,
+                dict(agent_state),
+                dict(stand_on_state) if stand_on_state is not None else None,
+            )
 
         env.step([action, None])
         steps = step_idx + 1
