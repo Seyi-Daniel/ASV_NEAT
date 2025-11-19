@@ -81,10 +81,11 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
 ## Training workflow
 
 1. Install `neat-python` (and `pygame` if rendering is desired).
-2. Launch training:
+2. Launch training (optionally selecting a specific encounter family):
 
    ```bash
-   python asv_neat/scripts/train.py --generations 100 --hp goal_bonus=-50
+   # Crossing-only run with a custom reward shaping term.
+   python asv_neat/scripts/train.py --scenario-kind crossing --generations 100 --hp goal_bonus=-50
    ```
 
    * Every genome is evaluated on all fifteen scenarios using a thread pool so the
@@ -95,7 +96,10 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
    * The default NEAT config (`configs/neat_crossing.cfg`) already expects 12
      inputs and nine outputs, matching the observation/action definitions.
 
-3. Optionally pickle the winner with `--save-winner path.pkl`.
+3. Optionally pickle the winner with `--save-winner path.pkl`. When `--render`
+   is specified the script also auto-saves the champion to
+   `winners/<scenario>_winner.pkl` so each scenario-specific run leaves behind a
+   reproducible checkpoint.
 4. After evolution the script prints a scenario-by-scenario summary (steps,
    COLREGs penalty, collision status, average cost) and, if `--render` is used,
   replays each encounter via pygame. Without `--render` the fifteen summaries are
@@ -133,6 +137,20 @@ here too via `--hp` overrides, ensuring the preview matches the training
 configuration. During rendering the give-way and stand-on destinations are now
 drawn as colour-coded markers so you can confirm that each vessel has its own
 goal beyond the shared crossing point.
+
+### Replaying saved winners
+
+Use `scripts/demo_winner.py` to visualise a previously trained genome. By
+default it looks for `winners/<scenario>_winner.pkl` so the file emitted by a
+scenario-specific `train.py --render` session can be replayed immediately:
+
+```bash
+python asv_neat/scripts/demo_winner.py --scenario-kind crossing --render
+```
+
+All hyperparameter overrides accepted by the training CLI are available here as
+well, ensuring the demo uses the exact same environment conditions as the run
+that produced the saved genome.
 
 ---
 
