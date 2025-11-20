@@ -6,7 +6,7 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence
+from typing import Any, Callable, List, Optional, Sequence
 
 import neat
 
@@ -90,6 +90,7 @@ def simulate_episode(
     *,
     render: bool = False,
     trace_callback: Optional[TraceCallback] = None,
+    frame_callback: Optional[Callable[[int, Any], None]] = None,
 ) -> EpisodeMetrics:
     """Roll a network-controlled episode within ``env`` for ``scenario``."""
 
@@ -134,6 +135,8 @@ def simulate_episode(
 
         if render:
             env.render()
+            if frame_callback is not None:
+                frame_callback(step_idx, getattr(env, "_screen", None))
 
         snapshot = env.snapshot()
         if not snapshot:
