@@ -154,6 +154,79 @@ that produced the saved genome.
 
 ---
 
+## LIME explanation workflow
+
+The project ships with an end-to-end LIME pipeline (`scripts/lime_explain.py`)
+for analysing the controller’s per-step decisions. It couples a small update to
+`simulate_episode` (a trace callback hook) with a scikit-learn style wrapper
+around the NEAT network so the `lime` package can call `predict_proba` just like
+it would on a conventional classifier.
+
+### Prerequisites
+
+1. Install `lime` alongside the existing training dependencies:
+
+   ```bash
+   pip install lime
+   ```
+
+2. Produce a `winner.pkl` via `scripts/train.py --save-winner` or grab the
+   auto-saved file emitted by a rendered training/demo session. Ensure the
+   matching NEAT config (defaults to `configs/neat_crossing.cfg`) is available so
+   the genome can be re-instantiated.
+
+### Capturing traces
+
+`simulate_episode` now accepts `trace_callback`, which is invoked once per step
+with the 12-element observation vector, the raw network outputs, the arg-maxed
+action, and the full agent/stand-on state snapshots. The LIME script passes a
+recorder that caches these structures verbatim before the environment advances
+to the next tick, guaranteeing that the explanation phase sees the exact values
+used by the controller.
+
+### Running the explainer
+
+```
+python asv_neat/scripts/lime_explain.py \
+  --scenario-kind crossing \
+  --winner winners/crossing_winner.pkl \
+  --output-dir lime_reports \
+  --hp max_steps=400  # optional overrides so the replay matches training
+```
+
+For every deterministic scenario of the selected encounter family the script:
+
+1. Rebuilds the NEAT network from the pickle/config pair.
+2. Replays the encounter without rendering while recording the trace via the new
+   callback.
+3. Computes summary metrics (steps, collision status, goal distance, COLREGs
+   penalties, etc.) and their aggregate cost.
+4. Feeds the captured feature matrix through `lime.LimeTabularExplainer` using
+   the built-in feature names and action labels, yielding a local explanation for
+   every time-step.
+
+### Output artefacts
+
+Results are grouped per scenario inside the requested `--output-dir`:
+
+```
+lime_reports/
+└── 01_crossing/
+    ├── metadata.json      # scenario geometry + per-episode metrics
+    ├── trace.json         # ordered list of recorded features/states/actions
+    ├── lime_step_000.json # individual per-step explanations (one file each)
+    └── lime_summary.json  # array of all per-step explanations in order
+```
+
+Each explanation records the selected action, the nine-way softmax probabilities
+returned by the NEAT network wrapper, the normalised feature values presented to
+the controller, and the LIME-attributed weights for those features. This makes
+it straightforward to line up a specific action choice with its causal inputs,
+repeatable across all steps (`max_steps`) and across five canonical encounters
+per scenario type.
+
+---
+
 ## Cost function overview
 
 The minimisation objective combines several components:
