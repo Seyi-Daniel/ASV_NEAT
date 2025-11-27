@@ -141,8 +141,8 @@ class ScenarioRequest:
     crossing_stand_on_speed: float = 7.0
     head_on_agent_speed: float = 7.0
     head_on_stand_on_speed: float = 7.0
-    overtaking_agent_speed: float = 9.0
-    overtaking_stand_on_speed: float = 6.0
+    overtaking_agent_speed: float = 7.0
+    overtaking_stand_on_speed: float = 7.0
 
     def speeds_for(self, kind: ScenarioKind) -> Tuple[float, float]:
         lookup: Dict[ScenarioKind, Tuple[float, float]] = {
@@ -172,7 +172,7 @@ def compute_crossing_geometry(
 
     goal_offset = request.goal_extension
 
-    agent_speed, requested_stand_on_speed = request.speeds_for(ScenarioKind.CROSSING)
+    agent_speed, stand_on_speed = request.speeds_for(ScenarioKind.CROSSING)
 
     agent = VesselState(
         name="give_way",
@@ -209,17 +209,19 @@ def compute_crossing_geometry(
     goal_x = crossing_point[0] + goal_offset * math.cos(heading_rad)
     goal_y = crossing_point[1] + goal_offset * math.sin(heading_rad)
 
-    # Match the stand-on vessel's ETA at the crossing point to the agent's
-    # straight-line ETA so that maintaining course leads to a collision in every
-    # predefined bearing example, even when the stand-on path is significantly
-    # longer (e.g. near 90° and 112.5°). The stand-on speed may therefore be
-    # elevated above the configured default for large relative bearings.
+    # Move the stand-on vessel closer to the crossing point (without exceeding
+    # the requested speed) when its path would otherwise be too long to collide
+    # with a straight-running agent. This keeps the realised bearing close to
+    # the requested value while ensuring equal ETAs even for wide starboard
+    # angles such as 85.62° and 112.5°.
     eta_agent = approach / agent_speed if agent_speed > 0.0 else float("inf")
     distance_to_crossing = math.hypot(stand_x - crossing_point[0], stand_y - crossing_point[1])
-    required_stand_on_speed = (
-        distance_to_crossing / eta_agent if eta_agent > 0.0 else requested_stand_on_speed
-    )
-    stand_on_speed = max(requested_stand_on_speed, required_stand_on_speed)
+    desired_distance = stand_on_speed * eta_agent if math.isfinite(eta_agent) else distance_to_crossing
+    if desired_distance < distance_to_crossing:
+        heading_unit_x = math.cos(heading_rad)
+        heading_unit_y = math.sin(heading_rad)
+        stand_x = crossing_point[0] - desired_distance * heading_unit_x
+        stand_y = crossing_point[1] - desired_distance * heading_unit_y
 
     stand_on = VesselState(
         name="stand_on",
