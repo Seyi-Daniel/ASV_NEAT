@@ -138,6 +138,11 @@ configuration. During rendering the give-way and stand-on destinations are now
 drawn as colour-coded markers so you can confirm that each vessel has its own
 goal beyond the shared crossing point.
 
+**HUD overlay:** when the pygame window is open you can press `H` to toggle the
+right-aligned HUD that lists each vessel’s position, heading and speed along
+with the TCPA/DCPA estimates. The preview script starts with the HUD hidden so
+`H` is the quickest way to bring it into view during a render session.
+
 ### Replaying saved winners
 
 Use `scripts/demo_winner.py` to visualise a previously trained genome. By
