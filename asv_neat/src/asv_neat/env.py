@@ -7,7 +7,7 @@ from typing import Iterable, List, Optional, Sequence
 
 from .boat import Boat
 from .config import BoatParams, EnvConfig, TurnSessionConfig
-from .utils import angle_deg
+from .utils import angle_deg, tcpa_dcpa
 
 try:  # pragma: no cover - optional dependency
     import pygame
@@ -264,12 +264,31 @@ class CrossingScenarioEnv:
         if self.ships:
             agent = self.ships[0]
             stand_on = self.ships[1] if len(self.ships) > 1 else None
-            lines.append(
-                f"Agent spd {agent.u:4.1f} m/s  hdg {angle_deg(agent.h):6.1f}°"
+
+            lines.extend(
+                [
+                    "Agent Vessel:",
+                    f"  Pos ({agent.x:6.1f}, {agent.y:6.1f}) m",
+                    f"  Hdg {angle_deg(agent.h):6.1f}°   Spd {agent.u:4.1f} m/s",
+                ]
             )
+
             if stand_on:
-                lines.append(
-                    f"Stand-on spd {stand_on.u:4.1f} m/s  hdg {angle_deg(stand_on.h):6.1f}°"
+                lines.extend(
+                    [
+                        "Stand-on Vessel:",
+                        f"  Pos ({stand_on.x:6.1f}, {stand_on.y:6.1f}) m",
+                        f"  Hdg {angle_deg(stand_on.h):6.1f}°   Spd {stand_on.u:4.1f} m/s",
+                    ]
+                )
+
+                tcpa, dcpa = tcpa_dcpa(agent.snapshot(), stand_on.snapshot())
+                tcpa_text = "∞" if math.isinf(tcpa) else f"{tcpa:6.2f} s"
+                lines.extend(
+                    [
+                        "CPA Estimates:",
+                        f"  TCPA {tcpa_text}   DCPA {dcpa:5.2f} m",
+                    ]
                 )
 
         width = max(self._font.size(text)[0] for text in lines) + 2 * pad
@@ -279,7 +298,7 @@ class CrossingScenarioEnv:
         for idx, text in enumerate(lines):
             img = self._font.render(text, True, (235, 235, 235))
             panel.blit(img, (pad, pad + idx * line_spacing))
-        surf.blit(panel, (10, 10))
+        surf.blit(panel, (self._width_px - width - 10, 10))
 
     def render(self) -> None:
         if not self._screen:
