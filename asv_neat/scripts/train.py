@@ -33,6 +33,11 @@ from asv_neat.cli_helpers import (  # noqa: E402
     filter_scenarios_by_kind,
     summarise_genome,
 )
+from asv_neat.paths import (  # noqa: E402
+    default_species_archive,
+    default_winner_path,
+    winner_directory,
+)
 
 
 def build_parser(hparams: HyperParameters) -> argparse.ArgumentParser:
@@ -72,6 +77,21 @@ def build_parser(hparams: HyperParameters) -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Optional path for pickling the winning genome after training.",
+    )
+    parser.add_argument(
+        "--species-archive",
+        type=str,
+        default=str(default_species_archive()),
+        help=(
+            "Directory to archive the top genomes for each species per generation. "
+            "Use an empty string to skip archiving."
+        ),
+    )
+    parser.add_argument(
+        "--species-top-n",
+        type=int,
+        default=3,
+        help="Number of genomes per species to preserve each generation.",
     )
     parser.add_argument(
         "--render",
@@ -131,6 +151,8 @@ def main(argv: Optional[list[str]] = None) -> None:
     turn_cfg = build_turn_config(hparams)
     env_cfg = build_env_config(hparams, render=False)
 
+    species_archive = Path(args.species_archive) if args.species_archive else None
+
     result = train_population(
         config_path=args.config,
         scenarios=scenarios,
@@ -142,15 +164,16 @@ def main(argv: Optional[list[str]] = None) -> None:
         seed=args.seed,
         checkpoint_dir=args.checkpoint_dir,
         checkpoint_interval=args.checkpoint_interval,
+        species_archive_dir=species_archive,
+        species_top_n=args.species_top_n,
     )
 
     winner_path = args.save_winner
     auto_generated = False
-    if winner_path is None and args.render:
+    if winner_path is None:
         auto_generated = True
-        default_dir = PROJECT_ROOT / "winners"
-        default_dir.mkdir(parents=True, exist_ok=True)
-        winner_path = default_dir / f"{args.scenario_kind}_winner.pkl"
+        winner_path = default_winner_path(args.scenario_kind)
+    winner_directory().mkdir(parents=True, exist_ok=True)
 
     if winner_path is not None:
         winner_path.parent.mkdir(parents=True, exist_ok=True)

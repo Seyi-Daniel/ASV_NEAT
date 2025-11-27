@@ -6,6 +6,7 @@ from .env import CrossingScenarioEnv
 from .hyperparameters import HyperParameters, apply_cli_overrides
 from .neat_training import (
     EpisodeMetrics,
+    SpeciesElitesReporter,
     TrainingResult,
     build_scenarios,
     episode_cost,
@@ -38,6 +39,7 @@ __all__ = [
     "HyperParameters",
     "apply_cli_overrides",
     "EpisodeMetrics",
+    "SpeciesElitesReporter",
     "TrainingResult",
     "build_scenarios",
     "episode_cost",
