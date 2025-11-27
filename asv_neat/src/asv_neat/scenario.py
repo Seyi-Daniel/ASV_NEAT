@@ -141,8 +141,8 @@ class ScenarioRequest:
     crossing_stand_on_speed: float = 7.0
     head_on_agent_speed: float = 7.0
     head_on_stand_on_speed: float = 7.0
-    overtaking_agent_speed: float = 9.0
-    overtaking_stand_on_speed: float = 6.0
+    overtaking_agent_speed: float = 7.0
+    overtaking_stand_on_speed: float = 7.0
 
     def speeds_for(self, kind: ScenarioKind) -> Tuple[float, float]:
         lookup: Dict[ScenarioKind, Tuple[float, float]] = {
@@ -208,6 +208,20 @@ def compute_crossing_geometry(
     heading_deg = (math.degrees(heading_rad) + 360.0) % 360.0
     goal_x = crossing_point[0] + goal_offset * math.cos(heading_rad)
     goal_y = crossing_point[1] + goal_offset * math.sin(heading_rad)
+
+    # Move the stand-on vessel closer to the crossing point (without exceeding
+    # the requested speed) when its path would otherwise be too long to collide
+    # with a straight-running agent. This keeps the realised bearing close to
+    # the requested value while ensuring equal ETAs even for wide starboard
+    # angles such as 85.62° and 112.5°.
+    eta_agent = approach / agent_speed if agent_speed > 0.0 else float("inf")
+    distance_to_crossing = math.hypot(stand_x - crossing_point[0], stand_y - crossing_point[1])
+    desired_distance = stand_on_speed * eta_agent if math.isfinite(eta_agent) else distance_to_crossing
+    if desired_distance < distance_to_crossing:
+        heading_unit_x = math.cos(heading_rad)
+        heading_unit_y = math.sin(heading_rad)
+        stand_x = crossing_point[0] - desired_distance * heading_unit_x
+        stand_y = crossing_point[1] - desired_distance * heading_unit_y
 
     stand_on = VesselState(
         name="stand_on",
@@ -283,7 +297,10 @@ def compute_overtaking_geometry(
     goal_offset = request.goal_extension
     agent_speed, stand_on_speed = request.speeds_for(ScenarioKind.OVERTAKING)
 
-    separation = 0.75 * approach
+    # Reduce the initial longitudinal separation so the faster give-way vessel
+    # closes the gap (and collides when holding course) within a single
+    # evaluation episode.
+    separation = 0.5 * approach
 
     agent = VesselState(
         name="give_way",

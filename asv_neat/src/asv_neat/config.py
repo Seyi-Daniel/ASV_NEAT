@@ -11,10 +11,10 @@ class BoatParams:
     length: float = 6.0
     width: float = 2.2
 
-    max_speed: float = 18.0
+    max_speed: float = 7.0
     min_speed: float = 0.0
-    accel_rate: float = 1.6
-    decel_rate: float = 1.2
+    accel_rate: float = 0.01
+    decel_rate: float = 0.01
 
 
 @dataclass

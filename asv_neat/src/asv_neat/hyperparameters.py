@@ -26,10 +26,10 @@ class HyperParameters:
     # Vessel geometry and kinetics -------------------------------------------------
     boat_length: float = _hp(6.0, "Length of each vessel hull in metres.", category="boat")
     boat_width: float = _hp(2.2, "Beam of each vessel in metres.", category="boat")
-    boat_max_speed: float = _hp(18.0, "Upper bound on achievable surge speed (m/s).", category="boat")
+    boat_max_speed: float = _hp(7.0, "Upper bound on achievable surge speed (m/s).", category="boat")
     boat_min_speed: float = _hp(0.0, "Lower bound on surge speed (m/s).", category="boat")
-    boat_accel_rate: float = _hp(1.6, "Rate of positive longitudinal acceleration (m/s²).", category="boat")
-    boat_decel_rate: float = _hp(1.2, "Rate of commanded deceleration (m/s²).", category="boat")
+    boat_accel_rate: float = _hp(0.01, "Rate of positive longitudinal acceleration (m/s²).", category="boat")
+    boat_decel_rate: float = _hp(0.01, "Rate of commanded deceleration (m/s²).", category="boat")
 
     # Helm control -----------------------------------------------------------------
     turn_chunk_deg: float = _hp(15.0, "Discrete heading change issued per helm command (degrees).", category="turn")
@@ -75,12 +75,12 @@ class HyperParameters:
         category="scenario",
     )
     scenario_overtaking_agent_speed: float = _hp(
-        9.0,
+        7.0,
         "Initial surge speed for the give-way vessel during overtaking encounters (m/s).",
         category="scenario",
     )
     scenario_overtaking_stand_on_speed: float = _hp(
-        6.0,
+        7.0,
         "Initial surge speed for the stand-on vessel during overtaking encounters (m/s).",
         category="scenario",
     )
