@@ -172,7 +172,7 @@ def compute_crossing_geometry(
 
     goal_offset = request.goal_extension
 
-    agent_speed, stand_on_speed = request.speeds_for(ScenarioKind.CROSSING)
+    agent_speed, requested_stand_on_speed = request.speeds_for(ScenarioKind.CROSSING)
 
     agent = VesselState(
         name="give_way",
@@ -208,6 +208,18 @@ def compute_crossing_geometry(
     heading_deg = (math.degrees(heading_rad) + 360.0) % 360.0
     goal_x = crossing_point[0] + goal_offset * math.cos(heading_rad)
     goal_y = crossing_point[1] + goal_offset * math.sin(heading_rad)
+
+    # Match the stand-on vessel's ETA at the crossing point to the agent's
+    # straight-line ETA so that maintaining course leads to a collision in every
+    # predefined bearing example, even when the stand-on path is significantly
+    # longer (e.g. near 90° and 112.5°). The stand-on speed may therefore be
+    # elevated above the configured default for large relative bearings.
+    eta_agent = approach / agent_speed if agent_speed > 0.0 else float("inf")
+    distance_to_crossing = math.hypot(stand_x - crossing_point[0], stand_y - crossing_point[1])
+    required_stand_on_speed = (
+        distance_to_crossing / eta_agent if eta_agent > 0.0 else requested_stand_on_speed
+    )
+    stand_on_speed = max(requested_stand_on_speed, required_stand_on_speed)
 
     stand_on = VesselState(
         name="stand_on",
@@ -283,7 +295,10 @@ def compute_overtaking_geometry(
     goal_offset = request.goal_extension
     agent_speed, stand_on_speed = request.speeds_for(ScenarioKind.OVERTAKING)
 
-    separation = 0.75 * approach
+    # Reduce the initial longitudinal separation so the faster give-way vessel
+    # closes the gap (and collides when holding course) within a single
+    # evaluation episode.
+    separation = 0.5 * approach
 
     agent = VesselState(
         name="give_way",
