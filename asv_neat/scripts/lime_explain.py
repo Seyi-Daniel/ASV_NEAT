@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate LIME explanations for a saved NEAT controller."""
+"""Generate LIME explanations and visualisations for a saved NEAT controller."""
 from __future__ import annotations
 
 import argparse
@@ -13,9 +13,29 @@ from typing import Iterable, List, Optional
 import numpy as np
 
 try:  # pragma: no cover - optional dependency
+    import imageio.v2 as imageio
+except Exception as exc:  # pragma: no cover - optional dependency
+    raise RuntimeError("The 'imageio' package is required to generate videos.") from exc
+
+try:  # pragma: no cover - optional dependency
+    import matplotlib.pyplot as plt
+except Exception as exc:  # pragma: no cover - optional dependency
+    raise RuntimeError("The 'matplotlib' package is required to plot explanations.") from exc
+
+try:  # pragma: no cover - optional dependency
     from lime import lime_tabular
 except Exception as exc:  # pragma: no cover - optional dependency
     raise RuntimeError("The 'lime' package is required to run the explanation script.") from exc
+
+try:  # pragma: no cover - optional dependency
+    from PIL import Image
+except Exception as exc:  # pragma: no cover - optional dependency
+    raise RuntimeError("The 'Pillow' package is required to compose visualisations.") from exc
+
+try:  # pragma: no cover - optional dependency
+    import pygame
+except Exception as exc:  # pragma: no cover - optional dependency
+    raise RuntimeError("The 'pygame' package is required to capture render frames.") from exc
 
 try:  # pragma: no cover - optional dependency
     import neat
@@ -62,6 +82,11 @@ FEATURE_NAMES: List[str] = [
     "stand_on_goal_x",
     "stand_on_goal_y",
 ]
+
+FRAME_DIRNAME = "frames"
+PLOT_DIRNAME = "plots"
+COMBINED_DIRNAME = "combined_frames"
+ANIMATION_FILENAME = "explanation_animation.gif"
 
 
 def _action_label(action: int) -> str:
@@ -185,6 +210,72 @@ def _write_json(path: Path, payload: dict | list) -> None:
         json.dump(payload, fh, indent=2)
 
 
+def _save_frame(path: Path, surface) -> None:
+    if surface is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pygame.image.save(surface, str(path))
+
+
+def _plot_explanation(step_data: dict, output_path: Path) -> None:
+    weights = {item["feature"]: item["weight"] for item in step_data["feature_attributions"]}
+    values = [weights.get(name, 0.0) for name in FEATURE_NAMES]
+    colors = ["#3CB371" if weight >= 0 else "#D95F02" for weight in values]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.barh(FEATURE_NAMES, values, color=colors)
+    ax.axvline(0.0, color="#333333", linewidth=1)
+    ax.set_title(
+        f"Step {step_data['step']:03d} — {step_data['action_label']} (prob={max(step_data['predicted_probabilities']):.2f})"
+    )
+    ax.set_xlabel("LIME weight")
+    plt.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path)
+    plt.close(fig)
+
+
+def _plot_explanations(explanations: List[dict], plot_dir: Path) -> List[Path]:
+    plot_paths: List[Path] = []
+    for item in explanations:
+        path = plot_dir / f"explanation_{item['step']:03d}.png"
+        _plot_explanation(item, path)
+        plot_paths.append(path)
+    return plot_paths
+
+
+def _combine_images(scene_path: Path, plot_path: Path, output_path: Path) -> None:
+    scene = Image.open(scene_path).convert("RGB")
+    plot = Image.open(plot_path).convert("RGB")
+    height = max(scene.height, plot.height)
+    canvas = Image.new("RGB", (scene.width + plot.width, height), color=(0, 0, 0))
+    canvas.paste(scene, (0, 0))
+    canvas.paste(plot, (scene.width, 0))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(output_path)
+
+
+def _combine_frames(frame_dir: Path, plot_dir: Path, combined_dir: Path) -> List[Path]:
+    combined: List[Path] = []
+    for frame_path in sorted(frame_dir.glob("frame_*.png")):
+        step = frame_path.stem.split("_")[-1]
+        plot_path = plot_dir / f"explanation_{step}.png"
+        if not plot_path.exists():
+            continue
+        output_path = combined_dir / f"combined_{step}.png"
+        _combine_images(frame_path, plot_path, output_path)
+        combined.append(output_path)
+    return combined
+
+
+def _write_animation(frame_paths: List[Path], output_path: Path, fps: int = 8) -> None:
+    if not frame_paths:
+        return
+    images = [imageio.imread(path) for path in frame_paths]
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    imageio.mimsave(output_path, images, fps=fps)
+
+
 def _generate_lime(
     scenario_dir: Path,
     trace: List[dict],
@@ -265,17 +356,25 @@ def explain_scenarios(
     for idx, scenario in enumerate(scenarios, start=1):
         scenario_dir = output_dir / f"{idx:02d}_{scenario.kind.value}"
         scenario_dir.mkdir(parents=True, exist_ok=True)
+        frame_dir = scenario_dir / FRAME_DIRNAME
+        plot_dir = scenario_dir / PLOT_DIRNAME
+        combined_dir = scenario_dir / COMBINED_DIRNAME
         env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
         trace: List[dict] = []
         try:
             recorder = _trace_recorder(trace)
+
+            def frame_recorder(step: int, surf) -> None:
+                _save_frame(frame_dir / f"frame_{step:03d}.png", surf)
+
             metrics = simulate_episode(
                 env,
                 scenario,
                 network,
                 hparams,
-                render=False,
+                render=True,
                 trace_callback=recorder,
+                frame_callback=frame_recorder,
             )
         finally:
             env.close()
@@ -283,7 +382,10 @@ def explain_scenarios(
         metadata = _scenario_metadata(scenario, metrics, cost)
         _write_json(scenario_dir / "metadata.json", metadata)
         _write_json(scenario_dir / "trace.json", trace)
-        _generate_lime(scenario_dir, trace, network)
+        explanations = _generate_lime(scenario_dir, trace, network)
+        _plot_explanations(explanations, plot_dir)
+        combined_frames = _combine_frames(frame_dir, plot_dir, combined_dir)
+        _write_animation(combined_frames, scenario_dir / ANIMATION_FILENAME)
         print(
             f"Scenario {idx:02d} [{scenario.kind.value}] steps={metrics.steps:4d} "
             f"cost={cost:7.2f} outputs saved to {scenario_dir}"
@@ -318,7 +420,7 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     boat_params = build_boat_params(hparams)
     turn_cfg = build_turn_config(hparams)
-    env_cfg = build_env_config(hparams, render=False)
+    env_cfg = build_env_config(hparams, render=True)
 
     explain_scenarios(
         winner_path=winner_path,
