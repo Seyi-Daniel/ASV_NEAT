@@ -67,6 +67,7 @@ from asv_neat.config import BoatParams, EnvConfig, TurnSessionConfig  # noqa: E4
 from asv_neat.env import CrossingScenarioEnv  # noqa: E402
 from asv_neat.neat_training import TraceCallback  # noqa: E402
 from asv_neat.scenario import EncounterScenario  # noqa: E402
+from asv_neat.paths import default_winner_path  # noqa: E402
 
 FEATURE_NAMES: List[str] = [
     "agent_x",
@@ -414,7 +415,7 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     winner_path = args.winner
     if winner_path is None:
-        winner_path = PROJECT_ROOT / "winners" / f"{args.scenario_kind}_winner.pkl"
+        winner_path = default_winner_path(args.scenario_kind)
     if not winner_path.exists():
         parser.error(f"Winner file '{winner_path}' does not exist.")
 

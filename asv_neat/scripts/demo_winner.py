@@ -28,6 +28,7 @@ from asv_neat.cli_helpers import (  # noqa: E402
     filter_scenarios_by_kind,
     summarise_genome,
 )
+from asv_neat.paths import default_winner_path  # noqa: E402
 
 
 def build_parser(hparams: HyperParameters) -> argparse.ArgumentParser:
@@ -105,7 +106,7 @@ def main(argv: Optional[list[str]] = None) -> None:
 
     winner_path = args.winner
     if winner_path is None:
-        winner_path = PROJECT_ROOT / "winners" / f"{args.scenario_kind}_winner.pkl"
+        winner_path = default_winner_path(args.scenario_kind)
 
     if not winner_path.exists():
         parser.error(f"Winner file '{winner_path}' does not exist.")

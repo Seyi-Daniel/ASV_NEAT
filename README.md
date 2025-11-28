@@ -96,17 +96,22 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
    * The default NEAT config (`configs/neat_crossing.cfg`) already expects 12
      inputs and nine outputs, matching the observation/action definitions.
 
-3. Optionally pickle the winner with `--save-winner path.pkl`. When `--render`
-   is specified the script also auto-saves the champion to
-   `winners/<scenario>_winner.pkl` so each scenario-specific run leaves behind a
-   reproducible checkpoint.
+3. The winning genome is saved by default to `winners/<scenario>_winner.pkl` so
+   it can be replayed immediately. Override the location with `--save-winner`
+   if you prefer a custom path. The demo (`scripts/demo_winner.py`) and LIME
+   explainer (`scripts/lime_explain.py`) both look in the same directory when no
+   `--winner` path is supplied.
 4. After evolution the script prints a scenario-by-scenario summary (steps,
    COLREGs penalty, collision status, average cost) and, if `--render` is used,
-  replays each encounter via pygame. Without `--render` the fifteen summaries are
-  gathered in parallel so the evaluations finish together before printing.
+   replays each encounter via pygame. Without `--render` the fifteen summaries are
+   gathered in parallel so the evaluations finish together before printing.
 
 Checkpoints can be enabled with `--checkpoint-dir` and
-`--checkpoint-interval` to capture intermediate states during longer runs.
+`--checkpoint-interval` to capture intermediate states during longer runs. You
+can also archive the top genomes for every species and generation by pointing
+`--species-archive` at a directory (defaults to `winners/species_archive`). The
+archive stores up to `--species-top-n` pickled genomes (default 3) per species,
+along with the NEAT config used to train them.
 
 ---
 

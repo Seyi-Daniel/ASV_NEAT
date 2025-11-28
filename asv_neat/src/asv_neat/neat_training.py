@@ -7,8 +7,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, List, Optional, Sequence
+import pickle
+import shutil
 
 import neat
+from neat.reporting import ReporterBase
 
 from .boat import Boat
 from .config import BoatParams, EnvConfig, TurnSessionConfig
@@ -317,6 +320,77 @@ def evaluate_population(
         genome.fitness = -average_cost
 
 
+class SpeciesElitesReporter(ReporterBase):
+    """Persist the top-N genomes per species after each generation."""
+
+    def __init__(
+        self,
+        output_dir: Path,
+        *,
+        top_n: int = 3,
+        config_path: Path | None = None,
+    ) -> None:
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.top_n = max(1, top_n)
+        self._generation = 0
+        self._config_path = Path(config_path) if config_path is not None else None
+        self._config_copied = False
+
+    def start_generation(self, generation: int) -> None:  # pragma: no cover - reporter hook
+        self._generation = generation
+
+    def post_evaluate(
+        self,
+        config,
+        population,
+        species_set,
+        best_genome,
+    ) -> None:  # pragma: no cover - reporter hook
+        self._copy_config_once()
+
+        for species_id, species in species_set.species.items():
+            members = list(species.members.items())
+            elite_candidates = [
+                (genome_id, genome)
+                for genome_id, genome in members
+                if getattr(genome, "fitness", None) is not None
+            ]
+
+            if not elite_candidates:
+                continue
+
+            elite_candidates.sort(key=lambda item: item[1].fitness, reverse=True)
+
+            species_dir = self.output_dir / f"species_{species_id:03d}"
+            species_dir.mkdir(parents=True, exist_ok=True)
+
+            for rank, (genome_id, genome) in enumerate(
+                elite_candidates[: self.top_n], start=1
+            ):
+                metadata = {
+                    "generation": self._generation,
+                    "species_id": species_id,
+                    "genome_id": genome_id,
+                    "fitness": genome.fitness,
+                }
+                filename = (
+                    species_dir
+                    / f"gen_{self._generation:04d}_rank{rank}_gid{genome_id}.pkl"
+                )
+                with filename.open("wb") as fh:
+                    pickle.dump({"genome": genome, "metadata": metadata}, fh)
+
+    def _copy_config_once(self) -> None:
+        if self._config_copied or self._config_path is None:
+            return
+
+        destination = self.output_dir / self._config_path.name
+        if not destination.exists():
+            shutil.copyfile(self._config_path, destination)
+        self._config_copied = True
+
+
 @dataclass
 class TrainingResult:
     """Return value from :func:`train_population`."""
@@ -337,6 +411,8 @@ def train_population(
     seed: Optional[int] = None,
     checkpoint_dir: Optional[Path] = None,
     checkpoint_interval: int = 5,
+    species_archive_dir: Optional[Path] = None,
+    species_top_n: int = 3,
 ) -> TrainingResult:
     """Run NEAT evolution configured for the COLREGs crossing experiments."""
 
@@ -355,6 +431,14 @@ def train_population(
     stats = neat.StatisticsReporter()
     population.add_reporter(stats)
     population.add_reporter(neat.StdOutReporter(True))
+
+    if species_archive_dir is not None:
+        species_reporter = SpeciesElitesReporter(
+            species_archive_dir,
+            top_n=species_top_n,
+            config_path=config_path,
+        )
+        population.add_reporter(species_reporter)
 
     if checkpoint_dir is not None:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -382,6 +466,7 @@ def build_scenarios(request: ScenarioRequest) -> List[EncounterScenario]:
 
 __all__ = [
     "EpisodeMetrics",
+    "SpeciesElitesReporter",
     "TrainingResult",
     "build_scenarios",
     "episode_cost",
