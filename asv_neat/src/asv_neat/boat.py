@@ -9,7 +9,7 @@ from .utils import clamp, wrap_pi
 
 
 class Boat:
-    """Vessel model with simple chunked turn sessions."""
+    """Vessel model with simple per-step helm inputs."""
 
     def __init__(
         self,
@@ -40,10 +40,6 @@ class Boat:
         self.last_thr = 0
         self.last_helm = 0
 
-        self.session_active = False
-        self.session_dir = 0
-        self.session_target = 0.0
-
     # ------------------------------------------------------------------
     # State helpers
     # ------------------------------------------------------------------
@@ -62,58 +58,27 @@ class Boat:
 
     @staticmethod
     def decode_action(action: int) -> Tuple[int, int]:
-        """Map an action index to signed ``(helm, throttle)``."""
+        """Map an action index to discrete ``(steer, throttle)`` selections."""
 
-        steer = action // 3
-        throttle = action % 3
-        helm = -1 if steer == 1 else 1 if steer == 2 else 0
-        thr = 1 if throttle == 1 else -1 if throttle == 2 else 0
-        return helm, thr
-
-    def _start_session(self, direction: int) -> None:
-        delta = math.radians(self.tcfg.turn_deg) * direction
-        self.session_dir = direction
-        self.session_target = wrap_pi(self.h + delta)
-        self.session_active = True
+        steer = action // 3  # 0: straight, 1: port, 2: starboard
+        throttle = action % 3  # 0: hold, 1: accelerate, 2: decelerate
+        return steer, throttle
 
     def apply_action(self, action: int) -> None:
-        helm, thr = self.decode_action(action)
-        self.last_helm = helm
-
-        if self.tcfg.passthrough_throttle and not (
-            self.tcfg.hold_throttle_while_turning and self.session_active
-        ):
-            self.last_thr = thr
-
-        if not self.session_active:
-            if helm != 0:
-                self._start_session(helm)
-        else:
-            if self.tcfg.allow_cancel and helm != 0:
-                self._start_session(helm)
+        steer, throttle = self.decode_action(action)
+        self.last_helm = steer
+        self.last_thr = throttle
 
     def integrate(self, dt: float) -> None:
-        if self.session_active and self.u > 0.0:
-            rate = math.radians(self.tcfg.turn_rate_degps)
-            err = wrap_pi(self.session_target - self.h)
-            hysteresis = math.radians(self.tcfg.hysteresis_deg)
+        if self.u > 0.0:
+            turn_rate = 0.035  # rad/s
+            direction = -1 if self.last_helm == 1 else 1 if self.last_helm == 2 else 0
+            if direction:
+                self.h = wrap_pi(self.h + direction * turn_rate * dt)
 
-            if abs(err) <= hysteresis:
-                self.h = self.session_target
-                self.session_active = False
-                self.session_dir = 0
-            else:
-                step = math.copysign(rate * dt, err)
-                if abs(step) >= abs(err):
-                    self.h = self.session_target
-                    self.session_active = False
-                    self.session_dir = 0
-                else:
-                    self.h = wrap_pi(self.h + step)
-
-        if self.last_thr > 0:
+        if self.last_thr == 1:
             self.u += self.kin.accel_rate * dt
-        elif self.last_thr < 0:
+        elif self.last_thr == 2:
             self.u -= self.kin.decel_rate * dt
         self.u = clamp(self.u, self.kin.min_speed, self.kin.max_speed)
 

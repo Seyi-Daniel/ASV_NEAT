@@ -121,7 +121,7 @@ def simulate_episode(
         features = observation_vector(agent_state, stand_on_state, params)
         outputs = network.activate(features)
         action = _argmax(outputs)
-        helm, _ = Boat.decode_action(action)
+        steer, _ = Boat.decode_action(action)
 
         if trace_callback is not None:
             trace_callback(
@@ -151,7 +151,7 @@ def simulate_episode(
         heading_error = heading_error_deg(agent_state)
 
         distance_improved = distance < (previous_distance - 1e-6)
-        distance_regressed = distance > (previous_distance + 1e-6)
+        distance_regressed = distance >= (previous_distance + 1e-6)
 
         prev_outside = previous_heading_error > params.heading_alignment_threshold_deg
         new_outside = heading_error > params.heading_alignment_threshold_deg
@@ -204,7 +204,7 @@ def simulate_episode(
                 and dcpa <= params.dcpa_threshold
                 and bearing <= params.angle_threshold_deg
             ):
-                if helm != 1:
+                if steer != 2:
                     wrong_action_cost += params.wrong_action_penalty
 
         if distance <= params.goal_tolerance:

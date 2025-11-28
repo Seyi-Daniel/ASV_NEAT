@@ -37,11 +37,11 @@ class HyperParameters:
     turn_hysteresis_deg: float = _hp(1.5, "Dead-band applied when terminating a turn session (deg).", category="turn")
 
     # Environment -------------------------------------------------------------------
-    env_world_w: float = _hp(520.0, "Width of the continuous simulation arena (metres).", category="environment")
-    env_world_h: float = _hp(520.0, "Height of the continuous simulation arena (metres).", category="environment")
+    env_world_w: float = _hp(700.0, "Width of the continuous simulation arena (metres).", category="environment")
+    env_world_h: float = _hp(440.0, "Height of the continuous simulation arena (metres).", category="environment")
     env_dt: float = _hp(0.05, "Primary integration time step (seconds).", category="environment")
     env_substeps: int = _hp(1, "Number of internal sub-steps used for integration.", category="environment")
-    env_pixels_per_meter: float = _hp(1.5, "Rendering scale when pygame visualisation is enabled.", category="environment")
+    env_pixels_per_meter: float = _hp(2, "Rendering scale when pygame visualisation is enabled.", category="environment")
 
     # Scenario geometry -------------------------------------------------------------
     scenario_crossing_distance: float = _hp(
@@ -103,7 +103,7 @@ class HyperParameters:
     )
 
     # Episode termination -----------------------------------------------------------
-    max_steps: int = _hp(1000, "Maximum number of simulation steps per scenario evaluation.", category="evaluation")
+    max_steps: int = _hp(1200, "Maximum number of simulation steps per scenario evaluation.", category="evaluation")
     goal_tolerance: float = _hp(10.0, "Distance to the goal at which an episode is marked successful (metres).", category="evaluation")
     collision_distance: float = _hp(8.0, "Separation threshold treated as a collision (metres).", category="evaluation")
 
