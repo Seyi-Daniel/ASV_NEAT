@@ -92,8 +92,11 @@ ANIMATION_FILENAME = "explanation_animation.gif"
 
 def _action_label(action: int) -> str:
     helm, thr = Boat.decode_action(action)
-    helm_map = { -1: "turn_port", 0: "hold_course", 1: "turn_starboard" }
-    thr_map = { -1: "decelerate", 0: "hold_speed", 1: "accelerate" }
+    # ``Boat.decode_action`` returns helm/throttle values in the range ``[0, 2]``
+    # where ``0`` represents the neutral command. Map these integer selections to
+    # human readable labels for use in plots and saved metadata.
+    helm_map = {0: "hold_course", 1: "turn_port", 2: "turn_starboard"}
+    thr_map = {0: "hold_speed", 1: "accelerate", 2: "decelerate"}
     return f"{helm_map[helm]}|{thr_map[thr]}"
 
 
@@ -258,7 +261,9 @@ def _combine_images(scene_path: Path, plot_path: Path, output_path: Path) -> Non
 
 def _combine_frames(frame_dir: Path, plot_dir: Path, combined_dir: Path) -> List[Path]:
     combined: List[Path] = []
-    for frame_path in sorted(frame_dir.glob("frame_*.png")):
+    # Sort frames numerically to avoid lexicographic ordering (e.g., 1000 before
+    # 200) when step indices exceed the padding width.
+    for frame_path in sorted(frame_dir.glob("frame_*.png"), key=lambda p: int(p.stem.split("_")[-1])):
         step = frame_path.stem.split("_")[-1]
         plot_path = plot_dir / f"explanation_{step}.png"
         if not plot_path.exists():
