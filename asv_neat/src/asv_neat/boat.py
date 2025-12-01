@@ -71,7 +71,7 @@ class Boat:
 
     def integrate(self, dt: float) -> None:
         if self.u > 0.0:
-            turn_rate = 0.035  # rad/s
+            turn_rate = 0.26  # rad/s
             direction = -1 if self.last_helm == 1 else 1 if self.last_helm == 2 else 0
             if direction:
                 self.h = wrap_pi(self.h + direction * turn_rate * dt)

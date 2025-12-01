@@ -6,12 +6,13 @@ import random
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence
 import pickle
 import shutil
 
 import neat
-from neat.reporting import ReporterBase
+import matplotlib.pyplot as plt
+from neat.reporting import BaseReporter
 
 from .boat import Boat
 from .config import BoatParams, EnvConfig, TurnSessionConfig
@@ -320,7 +321,7 @@ def evaluate_population(
         genome.fitness = -average_cost
 
 
-class SpeciesElitesReporter(ReporterBase):
+class SpeciesElitesReporter(BaseReporter):
     """Persist the top-N genomes per species after each generation."""
 
     def __init__(
@@ -464,6 +465,104 @@ def build_scenarios(request: ScenarioRequest) -> List[EncounterScenario]:
     return list(default_scenarios(request))
 
 
+def extract_training_curves(statistics: neat.StatisticsReporter) -> Dict[str, List[float]]:
+    """
+    Extract fitness and cost statistics from a ``neat.StatisticsReporter``.
+
+    Returns
+    -------
+    Dict[str, List[float]]
+        Keys include ``best_fitness``, ``mean_fitness``, ``stdev_fitness``, and the
+        corresponding ``best_cost``/``mean_cost`` values (cost is simply
+        ``-fitness`` because genomes maximise fitness while episodes minimise cost).
+    """
+
+    best_fitness = statistics.get_fitness_stat(max)
+    mean_fitness = statistics.get_fitness_mean()
+    stdev_fitness = statistics.get_fitness_stdev()
+
+    best_cost = [-f for f in best_fitness]
+    mean_cost = [-m for m in mean_fitness]
+
+    return {
+        "best_fitness": best_fitness,
+        "mean_fitness": mean_fitness,
+        "stdev_fitness": stdev_fitness,
+        "best_cost": best_cost,
+        "mean_cost": mean_cost,
+    }
+
+
+def plot_training_curves(
+    statistics: neat.StatisticsReporter,
+    *,
+    output_dir: Optional[Path] = None,
+    show: bool = True,
+) -> None:
+    """Plot per-generation fitness and cost curves using matplotlib.
+
+    When ``output_dir`` is provided the plots are also written as PNGs named
+    ``fitness_over_generations.png`` and ``cost_over_generations.png``. Setting
+    ``show=False`` is useful for headless environments while still saving files.
+    """
+
+    curves = extract_training_curves(statistics)
+
+    best_fitness = curves["best_fitness"]
+    mean_fitness = curves["mean_fitness"]
+    stdev_fitness = curves["stdev_fitness"]
+    best_cost = curves["best_cost"]
+    mean_cost = curves["mean_cost"]
+
+    generations = list(range(len(best_fitness)))
+
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Fitness plot ------------------------------------------------------------
+    plt.figure()
+    plt.plot(generations, best_fitness, label="Best fitness")
+    plt.plot(generations, mean_fitness, label="Mean fitness")
+    lower_f = [m - s for m, s in zip(mean_fitness, stdev_fitness)]
+    upper_f = [m + s for m, s in zip(mean_fitness, stdev_fitness)]
+    plt.fill_between(generations, lower_f, upper_f, alpha=0.2, label="Mean ± std")
+    plt.xlabel("Generation")
+    plt.ylabel("Fitness (higher is better)")
+    plt.title("Fitness over generations")
+    plt.legend()
+    plt.tight_layout()
+
+    if output_dir is not None:
+        plt.savefig(output_dir / "fitness_over_generations.png", dpi=150)
+
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+    # Cost plot ---------------------------------------------------------------
+    plt.figure()
+    plt.plot(generations, best_cost, label="Best cost")
+    plt.plot(generations, mean_cost, label="Mean cost")
+    lower_c = [m - s for m, s in zip(mean_cost, stdev_fitness)]
+    upper_c = [m + s for m, s in zip(mean_cost, stdev_fitness)]
+    plt.fill_between(generations, lower_c, upper_c, alpha=0.2, label="Mean ± std (approx)")
+    plt.xlabel("Generation")
+    plt.ylabel("Cost (lower is better)")
+    plt.title("Cost over generations")
+    plt.legend()
+    plt.tight_layout()
+
+    if output_dir is not None:
+        plt.savefig(output_dir / "cost_over_generations.png", dpi=150)
+
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+
 __all__ = [
     "EpisodeMetrics",
     "SpeciesElitesReporter",
@@ -473,5 +572,7 @@ __all__ = [
     "evaluate_population",
     "simulate_episode",
     "train_population",
+    "extract_training_curves",
+    "plot_training_curves",
 ]
 
