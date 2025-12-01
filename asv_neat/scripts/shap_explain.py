@@ -283,17 +283,50 @@ def _write_animation(frame_paths: List[Path], output_path: Path, fps: int = 8) -
 
 
 def _select_shap_values(shap_values, label: int) -> np.ndarray:
-    values = np.asarray(shap_values[label] if isinstance(shap_values, list) else shap_values, dtype=float)
-    values = np.squeeze(values, axis=0) if values.ndim > 1 and values.shape[0] == 1 else values
-    return np.asarray(values, dtype=float)
+    values = shap_values[label] if isinstance(shap_values, list) else shap_values
+    arr = np.asarray(values, dtype=float)
+
+    # ``shap.KernelExplainer`` can return a 3D array for multi-output models where
+    # the final dimension holds a SHAP value per output class. Extract the column
+    # for the predicted label while preserving the feature dimension.
+    if arr.ndim == 3:
+        if arr.shape[0] == 1:
+            arr = arr[0]
+        if arr.shape[1] > 1:
+            col = min(label, arr.shape[1] - 1)
+            arr = arr[:, col]
+
+    # Handle 2D outputs (nsamples x nfeatures) and select the label column if
+    # present.
+    if arr.ndim == 2:
+        if arr.shape[1] > 1:
+            col = min(label, arr.shape[1] - 1)
+            arr = arr[:, col]
+        elif arr.shape[0] == 1:
+            arr = arr[0]
+
+    # ``arr`` should now be 1D where each entry corresponds to a feature.
+    arr = np.squeeze(arr)
+    return np.asarray(arr, dtype=float).reshape(-1)
 
 
 def _expected_value_for_label(expected_value, label: int) -> float:
     values = expected_value[label] if isinstance(expected_value, list) else expected_value
     arr = np.asarray(values, dtype=float)
-    if arr.ndim:
-        arr = arr[label] if arr.shape[0] > label else arr[0]
-    return float(arr)
+
+    if arr.ndim == 0:
+        return float(arr)
+
+    if arr.ndim == 1:
+        idx = min(label, arr.shape[0] - 1)
+        return float(arr[idx])
+
+    if arr.ndim == 2:
+        row = 0 if arr.shape[0] == 1 else min(label, arr.shape[0] - 1)
+        col = min(label, arr.shape[1] - 1)
+        return float(arr[row, col])
+
+    return float(arr.flat[0])
 
 
 def _generate_shap(
