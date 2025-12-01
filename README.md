@@ -235,6 +235,44 @@ it straightforward to line up a specific action choice with its causal inputs,
 repeatable across all steps (`max_steps`) and across five canonical encounters
 per scenario type.
 
+### SHAP explanation workflow
+
+For a global/stepwise view of feature importance, a parallel SHAP pipeline is
+available via `scripts/shap_explain.py`. It reuses the same trace capture hooks
+as the LIME script but feeds the feature matrix through `shap.KernelExplainer`
+so every timestep receives SHAP values, plots and a stitched animation alongside
+the environment render frames.
+
+#### Prerequisites
+
+Install `shap` in the same environment used for training/demo:
+
+```bash
+pip install shap
+```
+
+#### Running the explainer
+
+```bash
+python asv_neat/scripts/shap_explain.py \
+  --scenario-kind crossing \
+  --winner winners/crossing_winner.pkl \
+  --output-dir shap_reports \
+  --hp max_steps=400  # optional overrides so the replay matches training
+```
+
+Artefacts mirror the LIME layout with SHAP-specific filenames:
+
+```
+shap_reports/
+└── 01_crossing/
+    ├── metadata.json       # scenario geometry + per-episode metrics
+    ├── trace.json          # ordered list of recorded features/states/actions
+    ├── shap_step_000.json  # per-step SHAP attributions (one file each)
+    ├── shap_summary.json   # array of all SHAP explanations in order
+    └── explanation_animation.gif  # combined render + bar plot per step
+```
+
 ---
 
 ## Cost function overview
