@@ -28,8 +28,8 @@ class HyperParameters:
     boat_width: float = _hp(2.2, "Beam of each vessel in metres.", category="boat")
     boat_max_speed: float = _hp(7.0, "Upper bound on achievable surge speed (m/s).", category="boat")
     boat_min_speed: float = _hp(0.0, "Lower bound on surge speed (m/s).", category="boat")
-    boat_accel_rate: float = _hp(0.01, "Rate of positive longitudinal acceleration (m/s²).", category="boat")
-    boat_decel_rate: float = _hp(0.01, "Rate of commanded deceleration (m/s²).", category="boat")
+    boat_accel_rate: float = _hp(0.20, "Rate of positive longitudinal acceleration (m/s²).", category="boat")
+    boat_decel_rate: float = _hp(0.05, "Rate of commanded deceleration (m/s²).", category="boat")
 
     # Helm control -----------------------------------------------------------------
     turn_chunk_deg: float = _hp(15.0, "Discrete heading change issued per helm command (degrees).", category="turn")
@@ -103,7 +103,7 @@ class HyperParameters:
     )
 
     # Episode termination -----------------------------------------------------------
-    max_steps: int = _hp(1200, "Maximum number of simulation steps per scenario evaluation.", category="evaluation")
+    max_steps: int = _hp(2000, "Maximum number of simulation steps per scenario evaluation.", category="evaluation")
     goal_tolerance: float = _hp(10.0, "Distance to the goal at which an episode is marked successful (metres).", category="evaluation")
     collision_distance: float = _hp(8.0, "Separation threshold treated as a collision (metres).", category="evaluation")
 
