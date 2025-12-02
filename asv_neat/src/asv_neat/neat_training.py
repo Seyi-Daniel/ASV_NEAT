@@ -310,7 +310,16 @@ def evaluate_individual(
 ) -> float:
     """Return the average cost accrued by ``genome`` over all scenarios."""
 
-    max_workers = params.evaluation_workers or os.cpu_count() or 1
+    max_workers = params.evaluation_workers
+    # CuPy kernels and streams can stall or oversubscribe when launched from many
+    # Python threads on some Windows setups. Default to a single worker when the
+    # GPU backend is active unless the user explicitly overrides the worker
+    # count.
+    if BACKEND_NAME.startswith("gpu") and max_workers is None:
+        max_workers = 1
+    else:
+        max_workers = max_workers or os.cpu_count() or 1
+
     worker_count = max(1, min(len(scenarios), max_workers))
     batch_size = max(1, ceil(len(scenarios) / worker_count))
     scenario_batches = _chunked(scenarios, batch_size)

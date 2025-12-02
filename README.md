@@ -71,7 +71,7 @@ Important groups include:
 | `env_*`     | Integration settings and render scaling. |
 | `scenario_*`| Encounter layout (distance/goal extension) and per-scenario speed profiles. |
 | `feature_*` | Normalisation constants applied to the 12-element observation vector. |
-| `max_steps`, `evaluation_workers` | Episode length cap and the maximum parallel scenario workers (defaults to CPU core count with batching). |
+| `max_steps`, `evaluation_workers` | Episode length cap and the maximum parallel scenario workers (defaults to CPU core count with batching; defaults to 1 when using the GPU backend unless overridden). |
 | `step_cost`, `goal_bonus`, `collision_penalty`, `timeout_penalty`, `distance_cost`, `distance_normaliser` | Cost shaping terms for the minimisation objective. |
 | `tcpa_threshold`, `dcpa_threshold`, `angle_threshold_deg`, `wrong_action_penalty` | Continuous COLREGs violation penalties (per-step costs when the wrong turn is taken inside the window). |
 
@@ -95,7 +95,10 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
 
    * Every genome is evaluated on all fifteen scenarios using a batched thread
      pool, capping workers at your CPU core count (or `--hp evaluation_workers`)
-     to avoid oversubscription while keeping encounter dynamics independent.
+     to avoid oversubscription while keeping encounter dynamics independent. On
+     GPU-backed setups (`cupy`), the default worker cap is 1 to sidestep CUDA
+     threading stalls; increase `evaluation_workers` manually if your GPU
+     configuration handles multi-threaded kernels reliably.
    * Fitness values are set to the **negative** average cost, meaning lower cost
      solutions yield higher NEAT fitness while respecting the minimisation
      framing.
