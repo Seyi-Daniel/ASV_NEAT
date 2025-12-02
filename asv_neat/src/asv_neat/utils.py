@@ -9,7 +9,7 @@ from .accelerator import to_scalar, xp
 def clamp(value: float, lo: float, hi: float) -> float:
     """Clamp ``value`` to the inclusive range ``[lo, hi]`` using the backend."""
 
-    return to_scalar(xp.clip(value, lo, hi))
+    return to_scalar(xp.clip(xp.asarray(value), lo, hi))
 
 
 def wrap_pi(angle: float) -> float:
