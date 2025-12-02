@@ -9,19 +9,41 @@ plain Python floats so existing consumers remain unchanged.
 from __future__ import annotations
 
 from typing import Any
+import warnings
 
 BACKEND_NAME = "cpu"
 
-try:  # pragma: no cover - optional dependency
-    import cupy as cp
 
-    xp = cp  # type: ignore[assignment]
-    BACKEND_NAME = "gpu (cupy)"
-except Exception:  # pragma: no cover - optional dependency
-    import numpy as np
+def _select_backend() -> tuple[str, Any]:
+    """Prefer CuPy when usable, otherwise fall back to NumPy.
 
-    xp = np  # type: ignore[assignment]
-    BACKEND_NAME = "cpu (numpy)"
+    Some environments have ``cupy`` installed without the required CUDA
+    runtime/driver DLLs (e.g., ``nvrtc64_120_0.dll``). In that case, attempting
+    to compile a kernel will raise at runtime. We proactively test a simple
+    elementwise operation to validate the installation; if it fails we emit a
+    warning and revert to CPU safely.
+    """
+
+    try:  # pragma: no cover - optional dependency
+        import cupy as cp
+
+        try:  # sanity-check kernel compilation
+            _ = cp.add(cp.ones(1), cp.ones(1))
+            _.item()  # force computation
+        except Exception as exc:  # pragma: no cover - optional dependency
+            warnings.warn(
+                f"CuPy is installed but unusable; falling back to NumPy ({exc})."
+            )
+            raise
+
+        return "gpu (cupy)", cp
+    except Exception:  # pragma: no cover - optional dependency
+        import numpy as np
+
+        return "cpu (numpy)", np
+
+
+BACKEND_NAME, xp = _select_backend()
 
 
 def to_scalar(value: Any) -> float:
