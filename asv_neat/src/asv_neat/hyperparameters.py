@@ -106,6 +106,11 @@ class HyperParameters:
     max_steps: int = _hp(2000, "Maximum number of simulation steps per scenario evaluation.", category="evaluation")
     goal_tolerance: float = _hp(10.0, "Distance to the goal at which an episode is marked successful (metres).", category="evaluation")
     collision_distance: float = _hp(8.0, "Separation threshold treated as a collision (metres).", category="evaluation")
+    evaluation_workers: int | None = _hp(
+        None,
+        "Maximum number of parallel scenario workers (None => use CPU core count).",
+        category="evaluation",
+    )
 
     # Cost shaping ------------------------------------------------------------------
     step_cost: float = _hp(1.0, "Base cost accrued each simulation step (minimisation objective).", category="cost")

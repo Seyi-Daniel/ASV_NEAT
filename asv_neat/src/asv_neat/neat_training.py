@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import random
 from concurrent.futures import ThreadPoolExecutor
+from math import ceil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
@@ -63,23 +64,44 @@ def _normalise(value: float, scale: float) -> float:
     return max(-1.0, min(1.0, value / scale))
 
 
+def _fill_observation_vector(
+    agent: dict,
+    stand_on: dict,
+    params: HyperParameters,
+    buffer: List[float],
+) -> None:
+    """Populate ``buffer`` with the 12-element feature vector consumed by the controller."""
+
+    pos_scale = params.feature_position_scale
+    heading_scale = params.feature_heading_scale
+    speed_scale = params.feature_speed_scale
+
+    ax = _normalise(float(agent["x"]), pos_scale)
+    ay = _normalise(float(agent["y"]), pos_scale)
+    ahead = _normalise(float(agent["heading"]), heading_scale)
+    aspeed = _normalise(float(agent.get("speed", 0.0)), speed_scale)
+    agx = _normalise(float(agent.get("goal_x", agent["x"])), pos_scale)
+    agy = _normalise(float(agent.get("goal_y", agent["y"])), pos_scale)
+
+    sx = _normalise(float(stand_on["x"]), pos_scale)
+    sy = _normalise(float(stand_on["y"]), pos_scale)
+    shead = _normalise(float(stand_on["heading"]), heading_scale)
+    sspeed = _normalise(float(stand_on.get("speed", 0.0)), speed_scale)
+    sgx = _normalise(float(stand_on.get("goal_x", stand_on["x"])), pos_scale)
+    sgy = _normalise(float(stand_on.get("goal_y", stand_on["y"])), pos_scale)
+
+    buffer[0:6] = [ax, ay, ahead, aspeed, agx, agy]
+    buffer[6:12] = [sx, sy, shead, sspeed, sgx, sgy]
+
+
 def observation_vector(
     agent: dict,
     stand_on: dict,
     params: HyperParameters,
 ) -> List[float]:
-    """Return the 12-element feature vector consumed by the controller."""
-
-    def pack(state: dict) -> List[float]:
-        x = _normalise(float(state["x"]), params.feature_position_scale)
-        y = _normalise(float(state["y"]), params.feature_position_scale)
-        heading = _normalise(float(state["heading"]), params.feature_heading_scale)
-        speed = _normalise(float(state.get("speed", 0.0)), params.feature_speed_scale)
-        goal_x = _normalise(float(state.get("goal_x", state["x"])), params.feature_position_scale)
-        goal_y = _normalise(float(state.get("goal_y", state["y"])), params.feature_position_scale)
-        return [x, y, heading, speed, goal_x, goal_y]
-
-    return pack(agent) + pack(stand_on)
+    buffer: List[float] = [0.0] * 12
+    _fill_observation_vector(agent, stand_on, params, buffer)
+    return buffer
 
 
 TraceCallback = Callable[
@@ -109,6 +131,7 @@ def simulate_episode(
     wrong_action_cost = 0.0
     goal_progress_bonus = 0.0
     steps = 0
+    features_buf: List[float] = [0.0] * 12
 
     for step_idx in range(params.max_steps):
         snapshot = env.snapshot()
@@ -120,15 +143,15 @@ def simulate_episode(
         previous_distance = goal_distance(agent_state)
         previous_heading_error = heading_error_deg(agent_state)
 
-        features = observation_vector(agent_state, stand_on_state, params)
-        outputs = network.activate(features)
+        _fill_observation_vector(agent_state, stand_on_state, params, features_buf)
+        outputs = network.activate(features_buf)
         action = _argmax(outputs)
         steer, _ = Boat.decode_action(action)
 
         if trace_callback is not None:
             trace_callback(
                 step_idx,
-                list(features),
+                list(features_buf),
                 list(outputs),
                 action,
                 dict(agent_state),
@@ -268,6 +291,10 @@ def episode_cost(metrics: EpisodeMetrics, params: HyperParameters) -> float:
     return cost
 
 
+def _chunked(items: Sequence[Any], size: int) -> List[Sequence[Any]]:
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
 def _make_env(cfg: EnvConfig, kin: BoatParams, turn: TurnSessionConfig) -> CrossingScenarioEnv:
     return CrossingScenarioEnv(cfg=cfg, kin=kin, tcfg=turn)
 
@@ -283,16 +310,26 @@ def evaluate_individual(
 ) -> float:
     """Return the average cost accrued by ``genome`` over all scenarios."""
 
-    def run_single(scenario: EncounterScenario) -> EpisodeMetrics:
+    max_workers = params.evaluation_workers or os.cpu_count() or 1
+    worker_count = max(1, min(len(scenarios), max_workers))
+    batch_size = max(1, ceil(len(scenarios) / worker_count))
+    scenario_batches = _chunked(scenarios, batch_size)
+
+    def run_batch(batch: Sequence[EncounterScenario]) -> List[EpisodeMetrics]:
         local_network = neat.nn.FeedForwardNetwork.create(genome, config)
         env = _make_env(env_cfg, boat_params, turn_cfg)
+        results: List[EpisodeMetrics] = []
         try:
-            return simulate_episode(env, scenario, local_network, params)
+            for scenario in batch:
+                results.append(simulate_episode(env, scenario, local_network, params))
+            return results
         finally:
             env.close()
 
-    with ThreadPoolExecutor(max_workers=len(scenarios)) as executor:
-        metrics = list(executor.map(run_single, scenarios))
+    metrics: List[EpisodeMetrics] = []
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        for batch_results in executor.map(run_batch, scenario_batches):
+            metrics.extend(batch_results)
 
     total_cost = sum(episode_cost(item, params) for item in metrics)
     return total_cost / len(metrics)
