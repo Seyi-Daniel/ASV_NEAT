@@ -81,6 +81,10 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
 ## Training workflow
 
 1. Install `neat-python` (and `pygame` if rendering is desired).
+   * Optional GPU acceleration: installing [CuPy](https://docs.cupy.dev/en/stable/install.html)
+     (e.g. `pip install cupy-cuda12x`) will offload the core kinematics and
+     geometry math to the GPU automatically. When present the trainer prints the
+     selected numeric backend before evolution begins.
 2. Launch training (optionally selecting a specific encounter family):
 
    ```bash

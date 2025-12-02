@@ -1,32 +1,33 @@
 """Utility helpers for the simplified crossing scenario package."""
 from __future__ import annotations
 
-import math
 from typing import Tuple
+
+from .accelerator import to_scalar, xp
 
 
 def clamp(value: float, lo: float, hi: float) -> float:
-    """Clamp ``value`` to the inclusive range ``[lo, hi]``."""
+    """Clamp ``value`` to the inclusive range ``[lo, hi]`` using the backend."""
 
-    return max(lo, min(hi, value))
+    return to_scalar(xp.clip(value, lo, hi))
 
 
 def wrap_pi(angle: float) -> float:
-    """Wrap an angle to the ``[-π, π]`` interval."""
+    """Wrap an angle to the ``[-π, π]`` interval using GPU math when available."""
 
-    return math.atan2(math.sin(angle), math.cos(angle))
+    return to_scalar(xp.arctan2(xp.sin(angle), xp.cos(angle)))
 
 
 def angle_deg(angle: float) -> float:
     """Convert radians to a canonical degree representation in ``[0, 360)``."""
 
-    return math.degrees(angle) % 360.0
+    return to_scalar(xp.degrees(angle) % 360.0)
 
 
 def euclidean_distance(ax: float, ay: float, bx: float, by: float) -> float:
     """Return the planar Euclidean distance between two points."""
 
-    return math.hypot(ax - bx, ay - by)
+    return to_scalar(xp.hypot(ax - bx, ay - by))
 
 
 def goal_distance(state: dict) -> float:
@@ -48,9 +49,9 @@ def heading_error_deg(state: dict) -> float:
     dy = gy - y
     if abs(dx) <= 1e-9 and abs(dy) <= 1e-9:
         return 0.0
-    desired_heading = math.atan2(dy, dx)
+    desired_heading = to_scalar(xp.arctan2(dy, dx))
     current_heading = float(state["heading"])
-    return abs(math.degrees(wrap_pi(desired_heading - current_heading)))
+    return abs(angle_deg(desired_heading - current_heading))
 
 
 def tcpa_dcpa(agent: dict, stand_on: dict) -> Tuple[float, float]:
@@ -66,10 +67,10 @@ def tcpa_dcpa(agent: dict, stand_on: dict) -> Tuple[float, float]:
     sh = float(stand_on["heading"])
     su = float(stand_on.get("speed", 0.0))
 
-    avx = math.cos(ah) * au
-    avy = math.sin(ah) * au
-    svx = math.cos(sh) * su
-    svy = math.sin(sh) * su
+    avx = to_scalar(xp.cos(ah) * au)
+    avy = to_scalar(xp.sin(ah) * au)
+    svx = to_scalar(xp.cos(sh) * su)
+    svy = to_scalar(xp.sin(sh) * su)
 
     rx = sx - ax
     ry = sy - ay
@@ -93,10 +94,10 @@ def relative_bearing_deg(observer: dict, target: dict) -> float:
     dx = float(target["x"]) - float(observer["x"])
     dy = float(target["y"]) - float(observer["y"])
     heading = float(observer["heading"])
-    ch = math.cos(heading)
-    sh = math.sin(heading)
+    ch = to_scalar(xp.cos(heading))
+    sh = to_scalar(xp.sin(heading))
     x_rel = ch * dx + sh * dy
     y_rel = -sh * dx + ch * dy
-    rel_port = math.degrees(math.atan2(y_rel, x_rel))
+    rel_port = angle_deg(xp.arctan2(y_rel, x_rel))
     rel_port = (rel_port + 360.0) % 360.0
     return (360.0 - rel_port) % 360.0

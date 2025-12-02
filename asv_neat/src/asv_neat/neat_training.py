@@ -17,6 +17,7 @@ from neat.reporting import BaseReporter
 from .boat import Boat
 from .config import BoatParams, EnvConfig, TurnSessionConfig
 from .env import CrossingScenarioEnv
+from .accelerator import BACKEND_NAME
 from .hyperparameters import HyperParameters
 from .scenario import (
     EncounterScenario,
@@ -419,6 +420,8 @@ def train_population(
 
     if seed is not None:
         random.seed(seed)
+
+    print(f"Numeric backend: {BACKEND_NAME}")
 
     neat_config = neat.Config(
         neat.DefaultGenome,
