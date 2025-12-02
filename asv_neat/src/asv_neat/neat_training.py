@@ -455,6 +455,26 @@ def train_population(
 ) -> TrainingResult:
     """Run NEAT evolution configured for the COLREGs crossing experiments."""
 
+    # Guard against neat-python's dynamic compatibility mean() helper crashing when it
+    # receives an empty iterator (observed as ``ZeroDivisionError`` during initial
+    # speciation on some environments). Monkeypatching the library keeps the behaviour
+    # consistent while avoiding hard failures for valid configurations.
+    try:  # pragma: no cover - defensive third-party patching
+        import neat.math_util as math_util
+
+        def _safe_mean(values):
+            values = list(values)
+            if not values:
+                return 0.0
+            return sum(map(float, values)) / len(values)
+
+        try:
+            math_util.mean([])
+        except ZeroDivisionError:
+            math_util.mean = _safe_mean
+    except Exception:
+        pass
+
     if seed is not None:
         random.seed(seed)
 
