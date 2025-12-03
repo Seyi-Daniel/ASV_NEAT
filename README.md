@@ -71,7 +71,7 @@ Important groups include:
 | `env_*`     | Integration settings and render scaling. |
 | `scenario_*`| Encounter layout (distance/goal extension) and per-scenario speed profiles. |
 | `feature_*` | Normalisation constants applied to the 12-element observation vector. |
-| `max_steps`, `evaluation_workers` | Episode length cap and the maximum parallel scenario workers (defaults to CPU core count with batching; override `evaluation_workers` to pin a specific value). |
+| `max_steps`, `evaluation_workers`, `evaluation_executor` | Episode length cap, the maximum parallel scenario workers (defaults to CPU core count with batching; override `evaluation_workers` to pin a specific value), and whether evaluation parallelism uses threads (default) or processes. |
 | `step_cost`, `goal_bonus`, `collision_penalty`, `timeout_penalty`, `distance_cost`, `distance_normaliser` | Cost shaping terms for the minimisation objective. |
 | `tcpa_threshold`, `dcpa_threshold`, `angle_threshold_deg`, `wrong_action_penalty` | Continuous COLREGs violation penalties (per-step costs when the wrong turn is taken inside the window). |
 
@@ -93,11 +93,13 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
    python asv_neat/scripts/train.py --scenario-kind crossing --generations 100 --hp goal_bonus=-50
    ```
 
-   * Every genome is evaluated on all fifteen scenarios using a batched thread
-     pool, capping workers at your CPU core count (or `--hp evaluation_workers`)
+   * Every genome is evaluated on all fifteen scenarios using a batched pool,
+     capping workers at your CPU core count (or `--hp evaluation_workers`)
      to avoid oversubscription while keeping encounter dynamics independent.
-     GPU-backed setups (`cupy`) now default to multi-worker evaluation but emit
-     a warning; if your CUDA stack stalls under thread fan-out, set
+     Use threads by default or switch to processes with
+     `--hp evaluation_executor=process` to bypass the GIL on CPU-bound runs.
+     GPU-backed setups (`cupy`) default to multi-worker evaluation but emit a
+     warning; if your CUDA stack stalls under thread fan-out, set
      `--hp evaluation_workers=1` to force serial execution.
    * Fitness values are set to the **negative** average cost, meaning lower cost
      solutions yield higher NEAT fitness while respecting the minimisation

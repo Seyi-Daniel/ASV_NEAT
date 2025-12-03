@@ -111,6 +111,11 @@ class HyperParameters:
         "Maximum number of parallel scenario workers (None => use CPU core count).",
         category="evaluation",
     )
+    evaluation_executor: str = _hp(
+        "thread",
+        "Parallelism backend for scenario evaluation: 'thread' (default) or 'process'.",
+        category="evaluation",
+    )
 
     # Cost shaping ------------------------------------------------------------------
     step_cost: float = _hp(1.0, "Base cost accrued each simulation step (minimisation objective).", category="cost")

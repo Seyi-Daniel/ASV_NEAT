@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import random
 import warnings
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from math import ceil
 from dataclasses import dataclass
 from pathlib import Path
@@ -296,6 +296,26 @@ def _chunked(items: Sequence[Any], size: int) -> List[Sequence[Any]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+def _run_scenario_batch(
+    genome,
+    config,
+    batch: Sequence[EncounterScenario],
+    env_cfg: EnvConfig,
+    boat_params: BoatParams,
+    turn_cfg: TurnSessionConfig,
+    params: HyperParameters,
+) -> List[EpisodeMetrics]:
+    local_network = neat.nn.FeedForwardNetwork.create(genome, config)
+    env = _make_env(env_cfg, boat_params, turn_cfg)
+    results: List[EpisodeMetrics] = []
+    try:
+        for scenario in batch:
+            results.append(simulate_episode(env, scenario, local_network, params))
+        return results
+    finally:
+        env.close()
+
+
 def _make_env(cfg: EnvConfig, kin: BoatParams, turn: TurnSessionConfig) -> CrossingScenarioEnv:
     return CrossingScenarioEnv(cfg=cfg, kin=kin, tcfg=turn)
 
@@ -329,20 +349,20 @@ def evaluate_individual(
     batch_size = max(1, ceil(len(scenarios) / worker_count))
     scenario_batches = _chunked(scenarios, batch_size)
 
-    def run_batch(batch: Sequence[EncounterScenario]) -> List[EpisodeMetrics]:
-        local_network = neat.nn.FeedForwardNetwork.create(genome, config)
-        env = _make_env(env_cfg, boat_params, turn_cfg)
-        results: List[EpisodeMetrics] = []
-        try:
-            for scenario in batch:
-                results.append(simulate_episode(env, scenario, local_network, params))
-            return results
-        finally:
-            env.close()
+    executor_choice = params.evaluation_executor.lower().strip()
+    if executor_choice not in {"thread", "process"}:
+        raise ValueError("evaluation_executor must be 'thread' or 'process'")
+
+    ExecutorCls = ThreadPoolExecutor if executor_choice == "thread" else ProcessPoolExecutor
 
     metrics: List[EpisodeMetrics] = []
-    with ThreadPoolExecutor(max_workers=worker_count) as executor:
-        for batch_results in executor.map(run_batch, scenario_batches):
+    with ExecutorCls(max_workers=worker_count) as executor:
+        for batch_results in executor.map(
+            lambda batch: _run_scenario_batch(
+                genome, config, batch, env_cfg, boat_params, turn_cfg, params
+            ),
+            scenario_batches,
+        ):
             metrics.extend(batch_results)
 
     total_cost = sum(episode_cost(item, params) for item in metrics)
