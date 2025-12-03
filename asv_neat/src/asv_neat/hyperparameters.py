@@ -33,7 +33,7 @@ class HyperParameters:
 
     # Helm control -----------------------------------------------------------------
     turn_chunk_deg: float = _hp(15.0, "Discrete heading change issued per helm command (degrees).", category="turn")
-    turn_rate_degps: float = _hp(45.0, "Maximum heading rate while a turn session is active (deg/s).", category="turn")
+    turn_rate_degps: float = _hp(15.0, "Maximum heading rate while a turn session is active (deg/s).", category="turn")
     turn_hysteresis_deg: float = _hp(1.5, "Dead-band applied when terminating a turn session (deg).", category="turn")
 
     # Environment -------------------------------------------------------------------
