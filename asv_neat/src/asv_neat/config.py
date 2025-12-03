@@ -22,7 +22,7 @@ class TurnSessionConfig:
     """Chunked turning behaviour parameters."""
 
     turn_deg: float = 15.0
-    turn_rate_degps: float = 45.0
+    turn_rate_degps: float = 15.0
     allow_cancel: bool = False
     hysteresis_deg: float = 1.5
 
