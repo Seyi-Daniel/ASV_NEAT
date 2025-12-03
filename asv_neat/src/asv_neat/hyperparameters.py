@@ -109,6 +109,16 @@ class HyperParameters:
 
     # Cost shaping ------------------------------------------------------------------
     step_cost: float = _hp(1.0, "Base cost accrued each simulation step (minimisation objective).", category="cost")
+    step_normaliser: float = _hp(
+        1000.0,
+        "Normalisation constant applied to the episode step count when adding a shaping cost.",
+        category="cost",
+    )
+    step_count_cost: float = _hp(
+        1.0,
+        "Multiplier applied to the normalised episode step count (encourages shorter episodes).",
+        category="cost",
+    )
     goal_bonus: float = _hp(
         -40.0,
         "Additional cost contribution applied when the goal is reached (negative rewards faster arrivals).",

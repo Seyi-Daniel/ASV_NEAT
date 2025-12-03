@@ -250,7 +250,10 @@ def simulate_episode(
 def episode_cost(metrics: EpisodeMetrics, params: HyperParameters) -> float:
     """Convert ``metrics`` into a scalar cost value (lower is better)."""
 
+    normalised_steps = metrics.steps / max(1.0, params.step_normaliser)
+
     cost = params.step_cost * metrics.steps
+    cost += params.step_count_cost * normalised_steps
 
     if metrics.reached_goal:
         cost += params.goal_bonus
