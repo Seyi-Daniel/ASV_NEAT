@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import random
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from math import ceil
 from dataclasses import dataclass
@@ -310,15 +311,19 @@ def evaluate_individual(
 ) -> float:
     """Return the average cost accrued by ``genome`` over all scenarios."""
 
-    max_workers = params.evaluation_workers
-    # CuPy kernels and streams can stall or oversubscribe when launched from many
-    # Python threads on some Windows setups. Default to a single worker when the
-    # GPU backend is active unless the user explicitly overrides the worker
-    # count.
-    if BACKEND_NAME.startswith("gpu") and max_workers is None:
-        max_workers = 1
+    requested_workers = params.evaluation_workers
+    if requested_workers is not None:
+        max_workers = max(1, requested_workers)
+    elif BACKEND_NAME.startswith("gpu"):
+        max_workers = max(1, min(len(scenarios), os.cpu_count() or len(scenarios) or 1))
+        if max_workers > 1:
+            warnings.warn(
+                "GPU backend detected; running with multiple evaluation workers. "
+                "Override the 'evaluation_workers' hyperparameter to force a specific count "
+                "if your CUDA setup stalls under thread fan-out."
+            )
     else:
-        max_workers = max_workers or os.cpu_count() or 1
+        max_workers = os.cpu_count() or 1
 
     worker_count = max(1, min(len(scenarios), max_workers))
     batch_size = max(1, ceil(len(scenarios) / worker_count))
