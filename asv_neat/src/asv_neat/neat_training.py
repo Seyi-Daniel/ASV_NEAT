@@ -13,9 +13,7 @@ import shutil
 import neat
 import matplotlib.pyplot as plt
 from neat.reporting import BaseReporter
-
-from .boat import Boat
-from .config import BoatParams, EnvConfig, TurnSessionConfig
+from .config import BoatParams, EnvConfig, RudderParams
 from .env import CrossingScenarioEnv
 from .hyperparameters import HyperParameters
 from .scenario import (
@@ -29,6 +27,7 @@ from .utils import (
     goal_distance,
     heading_error_deg,
     relative_bearing_deg,
+    clamp,
     tcpa_dcpa,
 )
 
@@ -44,16 +43,6 @@ class EpisodeMetrics:
     min_separation: float
     wrong_action_cost: float
     goal_progress_bonus: float
-
-
-def _argmax(values: Sequence[float]) -> int:
-    best_idx = 0
-    best_val = float("-inf")
-    for idx, val in enumerate(values):
-        if val > best_val:
-            best_idx = idx
-            best_val = val
-    return best_idx
 
 
 def _normalise(value: float, scale: float) -> float:
@@ -82,7 +71,7 @@ def observation_vector(
 
 
 TraceCallback = Callable[
-    [int, List[float], Sequence[float], int, dict, Optional[dict]], None
+    [int, List[float], Sequence[float], float, int, dict, Optional[dict]], None
 ]
 
 
@@ -121,20 +110,22 @@ def simulate_episode(
 
         features = observation_vector(agent_state, stand_on_state, params)
         outputs = network.activate(features)
-        action = _argmax(outputs)
-        steer, _ = Boat.decode_action(action)
+        rudder_cmd = float(outputs[0]) if outputs else 0.0
+        throttle_val = float(outputs[1]) if len(outputs) > 1 else 0.0
+        throttle = clamp(int(round(throttle_val * 2.0)), 0, 2)
 
         if trace_callback is not None:
             trace_callback(
                 step_idx,
                 list(features),
                 list(outputs),
-                action,
+                rudder_cmd,
+                throttle,
                 dict(agent_state),
                 dict(stand_on_state) if stand_on_state is not None else None,
             )
 
-        env.step([action, None])
+        env.step([(rudder_cmd, throttle), None])
         steps = step_idx + 1
 
         if render:
@@ -205,7 +196,7 @@ def simulate_episode(
                 and dcpa <= params.dcpa_threshold
                 and bearing <= params.angle_threshold_deg
             ):
-                if steer != 2:
+                if rudder_cmd <= 0.0:
                     wrong_action_cost += params.wrong_action_penalty
 
         if distance <= params.goal_tolerance:
@@ -270,8 +261,8 @@ def episode_cost(metrics: EpisodeMetrics, params: HyperParameters) -> float:
     return cost
 
 
-def _make_env(cfg: EnvConfig, kin: BoatParams, turn: TurnSessionConfig) -> CrossingScenarioEnv:
-    return CrossingScenarioEnv(cfg=cfg, kin=kin, tcfg=turn)
+def _make_env(cfg: EnvConfig, kin: BoatParams, rudder: RudderParams) -> CrossingScenarioEnv:
+    return CrossingScenarioEnv(cfg=cfg, kin=kin, rudder_cfg=rudder)
 
 
 def evaluate_individual(
@@ -280,14 +271,14 @@ def evaluate_individual(
     scenarios: Sequence[EncounterScenario],
     env_cfg: EnvConfig,
     boat_params: BoatParams,
-    turn_cfg: TurnSessionConfig,
+    rudder_cfg: RudderParams,
     params: HyperParameters,
 ) -> float:
     """Return the average cost accrued by ``genome`` over all scenarios."""
 
     def run_single(scenario: EncounterScenario) -> EpisodeMetrics:
         local_network = neat.nn.FeedForwardNetwork.create(genome, config)
-        env = _make_env(env_cfg, boat_params, turn_cfg)
+        env = _make_env(env_cfg, boat_params, rudder_cfg)
         try:
             return simulate_episode(env, scenario, local_network, params)
         finally:
@@ -306,7 +297,7 @@ def evaluate_population(
     scenarios: Sequence[EncounterScenario],
     env_cfg: EnvConfig,
     boat_params: BoatParams,
-    turn_cfg: TurnSessionConfig,
+    rudder_cfg: RudderParams,
     params: HyperParameters,
 ) -> None:
     """Assign NEAT fitness to each genome in ``genomes`` using the minimisation cost."""
@@ -318,7 +309,7 @@ def evaluate_population(
             scenarios,
             env_cfg,
             boat_params,
-            turn_cfg,
+            rudder_cfg,
             params,
         )
         genome.fitness = -average_cost
@@ -409,7 +400,7 @@ def train_population(
     scenarios: Sequence[EncounterScenario],
     env_cfg: EnvConfig,
     boat_params: BoatParams,
-    turn_cfg: TurnSessionConfig,
+    rudder_cfg: RudderParams,
     params: HyperParameters,
     generations: int,
     seed: Optional[int] = None,
@@ -455,7 +446,9 @@ def train_population(
         )
 
     def _eval(genomes, neat_config):
-        evaluate_population(genomes, neat_config, scenarios, env_cfg, boat_params, turn_cfg, params)
+        evaluate_population(
+            genomes, neat_config, scenarios, env_cfg, boat_params, rudder_cfg, params
+        )
 
     winner = population.run(_eval, generations)
 

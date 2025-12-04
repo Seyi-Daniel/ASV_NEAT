@@ -1,7 +1,7 @@
 """Convenience exports for the NEAT-controlled COLREGs crossing project."""
 
 from .boat import Boat
-from .config import BoatParams, EnvConfig, TurnSessionConfig
+from .config import BoatParams, EnvConfig, RudderParams
 from .env import CrossingScenarioEnv
 from .hyperparameters import HyperParameters, apply_cli_overrides
 from .neat_training import (
@@ -34,7 +34,7 @@ __all__ = [
     "Boat",
     "BoatParams",
     "EnvConfig",
-    "TurnSessionConfig",
+    "RudderParams",
     "CrossingScenarioEnv",
     "HyperParameters",
     "apply_cli_overrides",

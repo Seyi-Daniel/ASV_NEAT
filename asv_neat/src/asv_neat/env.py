@@ -6,7 +6,7 @@ from collections import deque
 from typing import Iterable, List, Optional, Sequence
 
 from .boat import Boat
-from .config import BoatParams, EnvConfig, TurnSessionConfig
+from .config import BoatParams, EnvConfig, RudderParams
 from .utils import angle_deg, tcpa_dcpa
 
 try:  # pragma: no cover - optional dependency
@@ -24,11 +24,11 @@ class CrossingScenarioEnv:
         self,
         cfg: EnvConfig = EnvConfig(),
         kin: BoatParams = BoatParams(),
-        tcfg: TurnSessionConfig = TurnSessionConfig(),
+        rudder_cfg: RudderParams = RudderParams(),
     ) -> None:
         self.cfg = cfg
         self.kin = kin
-        self.tcfg = tcfg
+        self.rudder_cfg = rudder_cfg
 
         self.world_w = float(cfg.world_w)
         self.world_h = float(cfg.world_h)
@@ -112,7 +112,7 @@ class CrossingScenarioEnv:
                 heading=float(spec["heading"]),
                 speed=float(spec.get("speed", 0.0)),
                 kin=self.kin,
-                tcfg=self.tcfg,
+                rudder_cfg=self.rudder_cfg,
                 goal=goal,
             )
             self.ships.append(boat)
@@ -120,7 +120,7 @@ class CrossingScenarioEnv:
     # ------------------------------------------------------------------
     # Simulation loop
     # ------------------------------------------------------------------
-    def step(self, actions: Optional[Sequence[Optional[int]]] = None) -> None:
+    def step(self, actions: Optional[Sequence[Optional[tuple[float, int]]]] = None) -> None:
         if not self.ships:
             return
 
@@ -134,7 +134,7 @@ class CrossingScenarioEnv:
         for _ in range(substeps):
             for boat, action in zip(self.ships, actions):
                 if action is not None:
-                    boat.apply_action(int(action))
+                    boat.apply_action(action)
             for boat in self.ships:
                 boat.integrate(h)
             self.time += h

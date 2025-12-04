@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from typing import Iterable, List
 
+import math
+
 import neat
 
-from .config import BoatParams, EnvConfig, TurnSessionConfig
+from .config import BoatParams, EnvConfig, RudderParams
 from .env import CrossingScenarioEnv
 from .hyperparameters import HyperParameters
 from .neat_training import episode_cost, simulate_episode
@@ -33,13 +35,13 @@ def build_boat_params(hparams: HyperParameters) -> BoatParams:
     )
 
 
-def build_turn_config(hparams: HyperParameters) -> TurnSessionConfig:
-    """Construct :class:`TurnSessionConfig` according to ``hparams``."""
+def build_rudder_config(hparams: HyperParameters) -> RudderParams:
+    """Construct :class:`RudderParams` according to ``hparams``."""
 
-    return TurnSessionConfig(
-        turn_deg=hparams.turn_chunk_deg,
-        turn_rate_degps=hparams.turn_rate_degps,
-        hysteresis_deg=hparams.turn_hysteresis_deg,
+    return RudderParams(
+        max_rudder=math.radians(hparams.rudder_max_angle_deg),
+        max_yaw_rate=hparams.rudder_max_yaw_rate,
+        max_rudder_rate=math.radians(hparams.rudder_max_rate_degps),
     )
 
 
@@ -96,7 +98,7 @@ def summarise_genome(
     scenarios: Iterable[EncounterScenario],
     hparams: HyperParameters,
     boat_params: BoatParams,
-    turn_cfg: TurnSessionConfig,
+    rudder_cfg: RudderParams,
     env_cfg: EnvConfig,
     *,
     render: bool = False,
@@ -122,7 +124,7 @@ def summarise_genome(
         )
 
     if render:
-        env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
+        env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, rudder_cfg=rudder_cfg)
         try:
             env.enable_render()
             total_cost = 0.0
@@ -147,7 +149,7 @@ def summarise_genome(
         return
 
     def _evaluate(idx_scenario: int, scenario: EncounterScenario):
-        local_env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
+        local_env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, rudder_cfg=rudder_cfg)
         try:
             metrics = simulate_episode(local_env, scenario, network, hparams, render=False)
         finally:
@@ -180,7 +182,7 @@ def summarise_genome(
 __all__ = [
     "SCENARIO_KIND_CHOICES",
     "build_boat_params",
-    "build_turn_config",
+    "build_rudder_config",
     "build_env_config",
     "build_scenario_request",
     "filter_scenarios_by_kind",

@@ -29,7 +29,7 @@ from asv_neat.cli_helpers import (  # noqa: E402
     build_boat_params,
     build_env_config,
     build_scenario_request,
-    build_turn_config,
+    build_rudder_config,
     filter_scenarios_by_kind,
     summarise_genome,
 )
@@ -148,7 +148,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         parser.error("No scenarios available for the requested encounter kind.")
 
     boat_params = build_boat_params(hparams)
-    turn_cfg = build_turn_config(hparams)
+    rudder_cfg = build_rudder_config(hparams)
     env_cfg = build_env_config(hparams, render=False)
 
     species_archive = Path(args.species_archive) if args.species_archive else None
@@ -158,7 +158,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         scenarios=scenarios,
         env_cfg=env_cfg,
         boat_params=boat_params,
-        turn_cfg=turn_cfg,
+        rudder_cfg=rudder_cfg,
         params=hparams,
         generations=args.generations,
         seed=args.seed,
@@ -191,7 +191,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         scenarios,
         hparams,
         boat_params,
-        turn_cfg,
+        rudder_cfg,
         render_cfg,
         render=args.render,
     )
