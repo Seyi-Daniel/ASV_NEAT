@@ -1,10 +1,10 @@
 """Boat dynamics used by the crossing scenario environment."""
 from __future__ import annotations
 
-import math
 from typing import Optional, Tuple
 
 from .config import BoatParams, TurnSessionConfig
+from .accelerator import to_scalar, xp
 from .utils import clamp, wrap_pi
 
 
@@ -82,5 +82,8 @@ class Boat:
             self.u -= self.kin.decel_rate * dt
         self.u = clamp(self.u, self.kin.min_speed, self.kin.max_speed)
 
-        self.x += math.cos(self.h) * self.u * dt
-        self.y += math.sin(self.h) * self.u * dt
+        cos_h = xp.cos(self.h)
+        sin_h = xp.sin(self.h)
+        displacement = self.u * dt
+        self.x += to_scalar(cos_h * displacement)
+        self.y += to_scalar(sin_h * displacement)
