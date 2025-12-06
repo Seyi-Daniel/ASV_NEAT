@@ -224,7 +224,7 @@ class CrossingScenarioEnv:
         )
 
         heading_start = pts[0]
-        heading_len = 1.4 * Lm
+        heading_len = 5 * Lm
         heading_end = (
             self.sx(boat.x + (0.5 * Lm + heading_len) * ch),
             self.sy(boat.y + (0.5 * Lm + heading_len) * sh),
@@ -233,7 +233,7 @@ class CrossingScenarioEnv:
 
         stern_x = boat.x - 0.5 * Lm * ch
         stern_y = boat.y - 0.5 * Lm * sh
-        rudder_len = 0.7 * Lm
+        rudder_len = 5 * Lm
         rudder_angle = boat.h + boat.rudder
         rudder_ch, rudder_sh = math.cos(rudder_angle), math.sin(rudder_angle)
         rudder_start = (self.sx(stern_x), self.sy(stern_y))
@@ -253,45 +253,51 @@ class CrossingScenarioEnv:
                 mid_x = 0.5 * (rudder_start[0] + rudder_end[0])
                 mid_y = 0.5 * (rudder_start[1] + rudder_end[1])
                 arrow_len = 14.0
-                throttle_start = (
+                p1 = (
                     mid_x - 0.5 * arrow_len * ux,
                     mid_y - 0.5 * arrow_len * uy,
                 )
-                throttle_end = (
+                p2 = (
                     mid_x + 0.5 * arrow_len * ux,
                     mid_y + 0.5 * arrow_len * uy,
                 )
-                direction = "forward" if boat.last_thr == 1 else "backward"
+
+                if boat.last_thr == 1:  # acceleration
+                    start, end = p1, p2
+                else:  # deceleration
+                    start, end = p2, p1
                 self._draw_arrow(
                     surf,
-                    (int(round(throttle_start[0])), int(round(throttle_start[1]))),
-                    (int(round(throttle_end[0])), int(round(throttle_end[1]))),
+                    (int(round(start[0])), int(round(start[1]))),
+                    (int(round(end[0])), int(round(end[1]))),
                     (255, 255, 255),
                     width=2,
-                    direction=direction,
+                    direction="forward",
                 )
 
             eps = 1e-4
-            if boat.last_rudder_cmd > eps:
-                normal = (-uy, ux)
-            elif boat.last_rudder_cmd < -eps:
-                normal = (uy, -ux)
-            else:
-                normal = None
+            if abs(boat.last_rudder_cmd) > eps:
+                # unit vector along rudder line (start -> end)
+                # normals to rudder line
+                left_normal  = (-uy,  ux)
+                right_normal = ( uy, -ux)
 
-            if normal is not None:
+                normal = left_normal if boat.last_rudder_cmd > 0 else right_normal
+
                 rc_len = 12.0
-                rc_end = (
-                    rudder_start[0] + rc_len * normal[0],
-                    rudder_start[1] + rc_len * normal[1],
-                )
+
+                # BASE AT THE BOTTOM OF THE RUDDER LINE
+                base_x, base_y = float(rudder_end[0]), float(rudder_end[1])
+                tip_x = base_x + rc_len * normal[0]
+                tip_y = base_y + rc_len * normal[1]
+
                 self._draw_arrow(
                     surf,
-                    rudder_start,
-                    (int(round(rc_end[0])), int(round(rc_end[1]))),
+                    (int(round(tip_x)), int(round(tip_y))),   # base at bottom
+                    (int(round(base_x)),  int(round(base_y))),    # arrow points outward
                     (235, 200, 120),
                     width=2,
-                    direction="forward",
+                    direction="forward",  # tip at 'end' (tip_x, tip_y)
                 )
         if self._font:
             name = "ASV" if boat.id == 0 else "Target Vessel"
