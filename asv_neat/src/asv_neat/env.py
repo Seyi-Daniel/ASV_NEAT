@@ -97,7 +97,7 @@ class CrossingScenarioEnv:
         self.step_index = 0
         self._meta = dict(meta or {})
 
-        self._traces = [deque(maxlen=1200) for _ in states]
+        self._traces = [deque() for _ in states]
         for idx, spec in enumerate(states):
             goal = spec.get("goal")
             if goal is None:
@@ -174,9 +174,12 @@ class CrossingScenarioEnv:
             pts.append((self.sx(wx), self.sy(wy)))
         pygame.draw.polygon(surf, color, pts)
         radius = max(1, int(round(0.5 * math.hypot(Lm, Wm) * self.ppm)))
-        pygame.draw.circle(surf, (255, 255, 255), (self.sx(boat.x), self.sy(boat.y)), radius, 1)
+        pygame.draw.circle(
+            surf, (255, 255, 255), (self.sx(boat.x), self.sy(boat.y)), radius * 2.2, 1
+        )
         if self._font:
-            label = self._font.render(str(boat.id), True, (255, 255, 255))
+            name = "ASV" if boat.id == 0 else "Target Vessel"
+            label = self._font.render(name, True, (255, 255, 255))
             surf.blit(label, (self.sx(boat.x) + 8, self.sy(boat.y) - 8))
 
     def _draw_crossing_marker(self, surf) -> None:

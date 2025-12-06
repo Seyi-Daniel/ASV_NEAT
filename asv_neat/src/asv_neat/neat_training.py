@@ -196,7 +196,7 @@ def simulate_episode(
                 and dcpa <= params.dcpa_threshold
                 and bearing <= params.angle_threshold_deg
             ):
-                if rudder_cmd <= 0.0:
+                if rudder_cmd >= 0.0:
                     wrong_action_cost += params.wrong_action_penalty
 
         if distance <= params.goal_tolerance:
