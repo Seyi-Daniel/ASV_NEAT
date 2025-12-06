@@ -97,9 +97,9 @@ def _rudder_angle_and_action(raw_output: float) -> tuple[float, str]:
     clamped = max(-1.0, min(1.0, raw_output))
     angle = clamped * 35.0
     if angle < -1e-3:
-        action = "turn port"
-    elif angle > 1e-3:
         action = "turn starboard"
+    elif angle > 1e-3:
+        action = "turn port"
     else:
         action = "straight"
     return angle, action
@@ -274,7 +274,7 @@ def _plot_explanations(explanations: List[dict], plot_dir: Path) -> List[tuple[i
             item["rudder"],
             rudder_path,
             title=(
-                f"Step: {step:03d}  Rudder angle: {rudder_angle:+.1f}° (-35° to +35°)  "
+                f"Step: {step:03d}  Rudder angle: {rudder_angle:+.1f}° "
                 f"Turn action: {rudder_action}"
             ),
         )
