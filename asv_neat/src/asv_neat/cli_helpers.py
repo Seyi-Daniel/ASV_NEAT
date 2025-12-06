@@ -56,8 +56,8 @@ def build_env_config(hparams: HyperParameters, *, render: bool) -> EnvConfig:
         render=render,
         pixels_per_meter=hparams.env_pixels_per_meter,
         show_grid=False,
-        show_trails=False,
-        show_hud=False,
+        show_trails=True,
+        show_hud=True,
     )
 
 
