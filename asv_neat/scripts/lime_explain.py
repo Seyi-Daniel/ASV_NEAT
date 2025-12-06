@@ -69,18 +69,18 @@ from asv_neat.scenario import EncounterScenario  # noqa: E402
 from asv_neat.paths import default_winner_path  # noqa: E402
 
 FEATURE_NAMES: List[str] = [
-    "agent_x",
-    "agent_y",
-    "agent_heading",
-    "agent_speed",
-    "agent_goal_x",
-    "agent_goal_y",
-    "stand_on_x",
-    "stand_on_y",
-    "stand_on_heading",
-    "stand_on_speed",
-    "stand_on_goal_x",
-    "stand_on_goal_y",
+    "x_goal_TV",
+    "y_goal_TV",
+    "speed_TV",
+    "heading_TV",
+    "x_TV",
+    "y_TV",
+    "x_goal_ASV",
+    "y_goal_ASV",
+    "speed_ASV",
+    "heading_ASV",
+    "x_ASV",
+    "y_ASV",
 ]
 
 FRAME_DIRNAME = "frames"
@@ -89,7 +89,20 @@ COMBINED_DIRNAME = "combined_frames"
 ANIMATION_FILENAME = "explanation_animation.gif"
 
 
-THROTTLE_LABELS: List[str] = ["coast", "accelerate", "decelerate"]
+THROTTLE_LABELS: List[str] = ["hold speed", "accelerate", "decelerate"]
+
+
+def _rudder_angle_and_action(raw_output: float) -> tuple[float, str]:
+    # assume raw_output is in [-1, 1] and map to [-35°, +35°]
+    clamped = max(-1.0, min(1.0, raw_output))
+    angle = clamped * 35.0
+    if angle < -1e-3:
+        action = "turn port"
+    elif angle > 1e-3:
+        action = "turn starboard"
+    else:
+        action = "straight"
+    return angle, action
 
 
 def _throttle_distribution(throttle_val: float) -> np.ndarray:
@@ -237,14 +250,16 @@ def _plot_explanation(step_data: dict, output_path: Path, *, title: str) -> None
     values = [weights.get(name, 0.0) for name in FEATURE_NAMES]
     colors = ["#3CB371" if weight >= 0 else "#D95F02" for weight in values]
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(12, 7))
     ax.barh(FEATURE_NAMES, values, color=colors)
     ax.axvline(0.0, color="#333333", linewidth=1)
-    ax.set_title(title)
-    ax.set_xlabel("LIME weight")
+    ax.set_title(title, fontsize=16, fontweight="bold")
+    ax.set_xlabel("LIME weight", fontsize=14)
+    ax.tick_params(axis="x", labelsize=12)
+    ax.tick_params(axis="y", labelsize=12)
     plt.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path)
+    fig.savefig(output_path, dpi=150)
     plt.close(fig)
 
 
@@ -254,17 +269,21 @@ def _plot_explanations(explanations: List[dict], plot_dir: Path) -> List[tuple[i
         step = item["step"]
         rudder_path = plot_dir / f"explanation_rudder_{step:03d}.png"
         throttle_path = plot_dir / f"explanation_throttle_{step:03d}.png"
+        rudder_angle, rudder_action = _rudder_angle_and_action(item["rudder"]["prediction"])
         _plot_explanation(
             item["rudder"],
             rudder_path,
-            title=f"Step {step:03d} — rudder output {item['rudder']['prediction']:.3f}",
+            title=(
+                f"Step: {step:03d}  Rudder angle: {rudder_angle:+.1f}° (-35° to +35°)  "
+                f"Turn action: {rudder_action}"
+            ),
         )
         _plot_explanation(
             item["throttle"],
             throttle_path,
             title=(
-                f"Step {step:03d} — throttle {THROTTLE_LABELS[item['throttle']['prediction']]} "
-                f"(p={max(item['throttle']['probabilities']):.2f})"
+                f"Step: {step:03d}  Throttle action: "
+                f"{THROTTLE_LABELS[item['throttle']['prediction']]}"
             ),
         )
         plot_paths.append((step, rudder_path, throttle_path))
