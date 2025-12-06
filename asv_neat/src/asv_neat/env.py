@@ -132,6 +132,8 @@ class CrossingScenarioEnv:
         h = dt / substeps
 
         for _ in range(substeps):
+            for boat in self.ships:
+                boat.begin_step()
             for boat, action in zip(self.ships, actions):
                 if action is not None:
                     boat.apply_action(action)
@@ -275,14 +277,15 @@ class CrossingScenarioEnv:
                     direction="forward",
                 )
 
-            eps = 1e-4
-            if abs(boat.last_rudder_cmd) > eps:
+            eps = 1e-3
+            rudder_delta = boat.last_rudder_cmd - boat.prev_rudder_cmd
+            if abs(rudder_delta) > eps:
                 # unit vector along rudder line (start -> end)
                 # normals to rudder line
                 left_normal  = (-uy,  ux)
                 right_normal = ( uy, -ux)
 
-                normal = left_normal if boat.last_rudder_cmd > 0 else right_normal
+                normal = left_normal if rudder_delta > 0 else right_normal
 
                 rc_len = 12.0
 
