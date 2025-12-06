@@ -93,17 +93,31 @@ THROTTLE_ANIMATION_FILENAME = "explanation_throttle_animation.gif"
 THROTTLE_LABELS: List[str] = ["hold speed", "accelerate", "decelerate"]
 
 
-def _rudder_angle_and_action(raw_output: float) -> tuple[float, str]:
+def _rudder_delta_action(current: float, previous: float, eps: float = 1e-6) -> str:
+    """Determine turn action based on difference in rudder outputs."""
+
+    delta = current - previous
+    if delta < -eps:
+        return "turn port"
+    if delta > eps:
+        return "turn starboard"
+    return "hold course"
+
+
+def _rudder_angle_and_action(raw_output: float, previous_output: float) -> tuple[float, str]:
     # assume raw_output is in [-1, 1] and map to [-35°, +35°]
     clamped = max(-1.0, min(1.0, raw_output))
     angle = clamped * 35.0
-    if angle < -1e-3:
-        action = "turn starboard"
-    elif angle > 1e-3:
-        action = "turn port"
-    else:
-        action = "straight"
+    if abs(angle) < 1e-6:
+        angle = 0.0
+    action = _rudder_delta_action(clamped, max(-1.0, min(1.0, previous_output)))
     return angle, action
+
+
+def _format_rudder_angle(angle: float) -> str:
+    if abs(angle) < 1e-6:
+        return "0.0"
+    return f"{angle:+.1f}"
 
 
 def _throttle_distribution(throttle_val: float) -> float:
@@ -245,16 +259,18 @@ def _plot_explanation(step_data: dict, output_path: Path, *, title: str) -> None
 
 def _plot_explanations(explanations: List[dict], plot_dir: Path) -> List[tuple[int, Path, Path]]:
     plot_paths: List[tuple[int, Path, Path]] = []
+    prev_rudder_output = 0.0
     for item in explanations:
         step = item["step"]
         rudder_path = plot_dir / f"explanation_rudder_{step:03d}.png"
         throttle_path = plot_dir / f"explanation_throttle_{step:03d}.png"
-        rudder_angle, rudder_action = _rudder_angle_and_action(item["rudder"]["prediction"])
+        rudder_pred = item["rudder"]["prediction"]
+        rudder_angle, rudder_action = _rudder_angle_and_action(rudder_pred, prev_rudder_output)
         _plot_explanation(
             item["rudder"],
             rudder_path,
             title=(
-                f"Step: {step:03d}  Rudder angle: {rudder_angle:+.1f}° "
+                f"Step: {step:03d}  Rudder angle: {_format_rudder_angle(rudder_angle)}° "
                 f"Turn action: {rudder_action}"
             ),
         )
@@ -266,6 +282,7 @@ def _plot_explanations(explanations: List[dict], plot_dir: Path) -> List[tuple[i
                 f"{THROTTLE_LABELS[item['throttle']['prediction']]}"
             ),
         )
+        prev_rudder_output = rudder_pred
         plot_paths.append((step, rudder_path, throttle_path))
     return plot_paths
 

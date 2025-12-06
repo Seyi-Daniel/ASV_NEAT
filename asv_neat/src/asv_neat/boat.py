@@ -39,6 +39,7 @@ class Boat:
 
         self.rudder = 0.0
         self.last_thr = 0
+        self.prev_rudder_cmd = 0.0
         self.last_rudder_cmd = 0.0
 
     # ------------------------------------------------------------------
@@ -69,8 +70,14 @@ class Boat:
 
     def apply_action(self, action) -> None:
         rudder_cmd, throttle = self.decode_action(action)
+        self.prev_rudder_cmd = self.last_rudder_cmd
         self.last_rudder_cmd = rudder_cmd
         self.last_thr = throttle
+
+    def begin_step(self) -> None:
+        """Record the current command so deltas can be computed later."""
+
+        self.prev_rudder_cmd = self.last_rudder_cmd
 
     def integrate(self, dt: float) -> None:
         max_step = self.rudder_cfg.max_rudder_rate * dt
