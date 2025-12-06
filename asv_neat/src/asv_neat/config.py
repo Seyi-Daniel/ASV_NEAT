@@ -1,6 +1,7 @@
 """Configuration dataclasses for the crossing scenario environment."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 
@@ -18,16 +19,12 @@ class BoatParams:
 
 
 @dataclass
-class TurnSessionConfig:
-    """Chunked turning behaviour parameters."""
+class RudderParams:
+    """Mechanical limits for the continuous rudder controller."""
 
-    turn_deg: float = 15.0
-    turn_rate_degps: float = 15.0
-    allow_cancel: bool = False
-    hysteresis_deg: float = 1.5
-
-    passthrough_throttle: bool = True
-    hold_throttle_while_turning: bool = False
+    max_rudder: float = math.radians(35.0)
+    max_yaw_rate: float = 0.25
+    max_rudder_rate: float = math.radians(40.0)
 
 
 @dataclass

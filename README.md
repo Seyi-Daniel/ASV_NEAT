@@ -9,18 +9,19 @@ which cleanly separates three concerns:
   encounters (five each for crossing, head-on and overtaking) so the stand-on
   vessel always lies within the rule-defined sector and the speed profiles can
   be tuned per situation.
-* **Environment simulation** – a lightweight pygame-compatible integrator that
-  applies chunked helm commands to simple boat dynamics while tracking both
-  vessels’ goals.
+* **Environment simulation** – a lightweight pygame-compatible integrator with
+  continuous rudder dynamics (limited angle/rate) and simple throttle while
+  tracking both vessels’ goals.
 * **Evolutionary training** – NEAT-Python integration that evaluates every
   genome across the fifteen scenarios _in parallel_, aggregates the cost
   metrics and feeds the resulting **minimisation** objective back to NEAT.
 
 The give-way vessel receives a 12-dimensional observation vector (position,
 heading, speed and goal coordinates for itself and the stand-on craft) and
-selects one of nine discrete action combinations (three helm directions × three
-throttle commands). Reward shaping encourages quick, collision-free arrivals
-while penalising COLREGs violations within a configurable TCPA/DCPA envelope.
+outputs two values: a continuous rudder command in ``[-1, 1]`` (scaled by the
+rudder limits) and a throttle selection (coast/accelerate/decelerate). Reward
+shaping encourages quick, collision-free arrivals while penalising COLREGs
+violations within a configurable TCPA/DCPA envelope.
 
 ---
 
@@ -67,7 +68,7 @@ Important groups include:
 | Name prefix | Purpose |
 |-------------|---------|
 | `boat_*`    | Hull geometry and surge acceleration/deceleration limits. |
-| `turn_*`    | Chunked helm session behaviour (degrees per command, rate, hysteresis). |
+| `rudder_*`  | Continuous rudder limits (max angle, yaw rate, and rudder slew rate). |
 | `env_*`     | Integration settings and render scaling. |
 | `scenario_*`| Encounter layout (distance/goal extension) and per-scenario speed profiles. |
 | `feature_*` | Normalisation constants applied to the 12-element observation vector. |
@@ -94,7 +95,8 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
      solutions yield higher NEAT fitness while respecting the minimisation
      framing.
    * The default NEAT config (`configs/neat_crossing.cfg`) already expects 12
-     inputs and nine outputs, matching the observation/action definitions.
+     inputs and two outputs (rudder command and throttle selector), matching the
+     observation/action definitions.
 
 3. The winning genome is saved by default to `winners/<scenario>_winner.pkl` so
    it can be replayed immediately. Override the location with `--save-winner`
@@ -228,10 +230,10 @@ lime_reports/
     └── lime_summary.json  # array of all per-step explanations in order
 ```
 
-Each explanation records the selected action, the nine-way softmax probabilities
-returned by the NEAT network wrapper, the normalised feature values presented to
-the controller, and the LIME-attributed weights for those features. This makes
-it straightforward to line up a specific action choice with its causal inputs,
+Each explanation records the rudder output, the discretised throttle choice
+with its derived probabilities, the normalised feature values presented to the
+controller, and the LIME-attributed weights for those features. This makes it
+straightforward to line up a specific command choice with its causal inputs,
 repeatable across all steps (`max_steps`) and across five canonical encounters
 per scenario type.
 

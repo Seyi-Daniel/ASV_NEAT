@@ -21,7 +21,6 @@ from asv_neat import (  # noqa: E402
     HyperParameters,
     ScenarioKind,
     ScenarioRequest,
-    TurnSessionConfig,
     apply_cli_overrides,
     build_scenarios,
     scenario_states_for_env,
@@ -34,8 +33,10 @@ class RandomGiveWayPolicy:
     def __init__(self, seed: int | None = None) -> None:
         self._rng = random.Random(seed)
 
-    def choose_action(self) -> int:
-        return self._rng.randrange(9)
+    def choose_action(self) -> tuple[float, int]:
+        rudder_cmd = self._rng.uniform(-1.0, 1.0)
+        throttle = self._rng.randrange(3)
+        return rudder_cmd, throttle
 
 
 def parse_args(hparams: HyperParameters) -> argparse.Namespace:
@@ -159,7 +160,7 @@ def main() -> None:
         decel_rate=hparams.boat_decel_rate,
     )
     env_cfg = build_env_config(hparams, render=args.render)
-    env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=TurnSessionConfig())
+    env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params)
     try:
         if args.render:
             env.enable_render()

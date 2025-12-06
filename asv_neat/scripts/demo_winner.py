@@ -24,7 +24,7 @@ from asv_neat.cli_helpers import (  # noqa: E402
     build_boat_params,
     build_env_config,
     build_scenario_request,
-    build_turn_config,
+    build_rudder_config,
     filter_scenarios_by_kind,
     summarise_genome,
 )
@@ -121,7 +121,7 @@ def main(argv: Optional[list[str]] = None) -> None:
     )
 
     boat_params = build_boat_params(hparams)
-    turn_cfg = build_turn_config(hparams)
+    rudder_cfg = build_rudder_config(hparams)
     env_cfg = build_env_config(hparams, render=args.render)
 
     summarise_genome(
@@ -130,7 +130,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         scenarios,
         hparams,
         boat_params,
-        turn_cfg,
+        rudder_cfg,
         env_cfg,
         render=args.render,
     )

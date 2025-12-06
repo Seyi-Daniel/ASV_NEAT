@@ -32,9 +32,21 @@ class HyperParameters:
     boat_decel_rate: float = _hp(0.05, "Rate of commanded deceleration (m/s²).", category="boat")
 
     # Helm control -----------------------------------------------------------------
-    turn_chunk_deg: float = _hp(15.0, "Discrete heading change issued per helm command (degrees).", category="turn")
-    turn_rate_degps: float = _hp(15.0, "Maximum heading rate while a turn session is active (deg/s).", category="turn")
-    turn_hysteresis_deg: float = _hp(1.5, "Dead-band applied when terminating a turn session (deg).", category="turn")
+    rudder_max_angle_deg: float = _hp(
+        35.0,
+        "Maximum absolute rudder angle (degrees).",
+        category="rudder",
+    )
+    rudder_max_yaw_rate: float = _hp(
+        0.25,
+        "Peak yaw rate achieved at max rudder deflection (rad/s).",
+        category="rudder",
+    )
+    rudder_max_rate_degps: float = _hp(
+        40.0,
+        "Maximum rudder slew rate (degrees per second).",
+        category="rudder",
+    )
 
     # Environment -------------------------------------------------------------------
     env_world_w: float = _hp(700.0, "Width of the continuous simulation arena (metres).", category="environment")

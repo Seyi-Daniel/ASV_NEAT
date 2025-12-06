@@ -54,16 +54,15 @@ from asv_neat import (  # noqa: E402
     episode_cost,
     simulate_episode,
 )
-from asv_neat.boat import Boat  # noqa: E402
 from asv_neat.cli_helpers import (  # noqa: E402
     SCENARIO_KIND_CHOICES,
     build_boat_params,
     build_env_config,
     build_scenario_request,
-    build_turn_config,
+    build_rudder_config,
     filter_scenarios_by_kind,
 )
-from asv_neat.config import BoatParams, EnvConfig, TurnSessionConfig  # noqa: E402
+from asv_neat.config import BoatParams, EnvConfig, RudderParams  # noqa: E402
 from asv_neat.env import CrossingScenarioEnv  # noqa: E402
 from asv_neat.neat_training import TraceCallback  # noqa: E402
 from asv_neat.scenario import EncounterScenario  # noqa: E402
@@ -90,21 +89,37 @@ COMBINED_DIRNAME = "combined_frames"
 ANIMATION_FILENAME = "explanation_animation.gif"
 
 
-def _action_label(action: int) -> str:
-    helm, thr = Boat.decode_action(action)
-    # ``Boat.decode_action`` returns helm/throttle values in the range ``[0, 2]``
-    # where ``0`` represents the neutral command. Map these integer selections to
-    # human readable labels for use in plots and saved metadata.
-    helm_map = {0: "hold_course", 1: "turn_port", 2: "turn_starboard"}
-    thr_map = {0: "hold_speed", 1: "accelerate", 2: "decelerate"}
-    return f"{helm_map[helm]}|{thr_map[thr]}"
+THROTTLE_LABELS: List[str] = ["coast", "accelerate", "decelerate"]
 
 
-ACTION_LABELS: List[str] = [_action_label(idx) for idx in range(9)]
+def _throttle_distribution(throttle_val: float) -> np.ndarray:
+    scaled = max(0.0, min(1.0, throttle_val)) * 2.0
+    logits = -np.square(scaled - np.arange(3, dtype=float))
+    logits = logits - logits.max()
+    exp = np.exp(logits)
+    denom = exp.sum()
+    if denom <= 0.0:
+        return np.asarray([1 / 3] * 3, dtype=float)
+    return exp / denom
 
 
-class LimeNetworkWrapper:
-    """Adapter that exposes the NEAT network with a scikit-learn style API."""
+class LimeRudderWrapper:
+    """Regression-style adapter exposing the rudder output."""
+
+    def __init__(self, network: neat.nn.FeedForwardNetwork) -> None:
+        self._network = network
+
+    def predict(self, data: np.ndarray) -> np.ndarray:
+        preds = []
+        for row in data:
+            outputs = np.asarray(self._network.activate(row.tolist()), dtype=float)
+            rudder = float(outputs[0]) if outputs.ndim > 0 and outputs.size > 0 else 0.0
+            preds.append(rudder)
+        return np.asarray(preds, dtype=float)
+
+
+class LimeThrottleWrapper:
+    """Classification adapter for the discrete throttle choice."""
 
     def __init__(self, network: neat.nn.FeedForwardNetwork) -> None:
         self._network = network
@@ -113,15 +128,9 @@ class LimeNetworkWrapper:
         predictions = []
         for row in data:
             outputs = np.asarray(self._network.activate(row.tolist()), dtype=float)
-            if outputs.ndim == 0:
-                outputs = np.asarray([outputs], dtype=float)
-            predictions.append(outputs)
-        logits = np.asarray(predictions, dtype=float)
-        logits = logits - logits.max(axis=1, keepdims=True)
-        exp = np.exp(logits)
-        denom = exp.sum(axis=1, keepdims=True)
-        denom[denom == 0.0] = 1.0
-        return exp / denom
+            throttle_val = float(outputs[1]) if outputs.ndim > 0 and outputs.size > 1 else 0.0
+            predictions.append(_throttle_distribution(throttle_val))
+        return np.asarray(predictions, dtype=float)
 
 
 def _serialise_vessel(state) -> dict:
@@ -173,7 +182,8 @@ def _trace_recorder(container: List[dict]) -> TraceCallback:
         step_idx: int,
         features: List[float],
         outputs,
-        action: int,
+        rudder_cmd: float,
+        throttle: int,
         agent_state: dict,
         stand_on_state: Optional[dict],
     ) -> None:
@@ -182,7 +192,8 @@ def _trace_recorder(container: List[dict]) -> TraceCallback:
                 "step": step_idx,
                 "features": features,
                 "outputs": list(outputs),
-                "predicted_action": action,
+                "rudder_cmd": float(rudder_cmd),
+                "throttle": int(throttle),
                 "agent_state": agent_state,
                 "stand_on_state": stand_on_state,
             }
@@ -221,7 +232,7 @@ def _save_frame(path: Path, surface) -> None:
     pygame.image.save(surface, str(path))
 
 
-def _plot_explanation(step_data: dict, output_path: Path) -> None:
+def _plot_explanation(step_data: dict, output_path: Path, *, title: str) -> None:
     weights = {item["feature"]: item["weight"] for item in step_data["feature_attributions"]}
     values = [weights.get(name, 0.0) for name in FEATURE_NAMES]
     colors = ["#3CB371" if weight >= 0 else "#D95F02" for weight in values]
@@ -229,9 +240,7 @@ def _plot_explanation(step_data: dict, output_path: Path) -> None:
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.barh(FEATURE_NAMES, values, color=colors)
     ax.axvline(0.0, color="#333333", linewidth=1)
-    ax.set_title(
-        f"Step {step_data['step']:03d} — {step_data['action_label']} (prob={max(step_data['predicted_probabilities']):.2f})"
-    )
+    ax.set_title(title)
     ax.set_xlabel("LIME weight")
     plt.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -239,12 +248,26 @@ def _plot_explanation(step_data: dict, output_path: Path) -> None:
     plt.close(fig)
 
 
-def _plot_explanations(explanations: List[dict], plot_dir: Path) -> List[Path]:
-    plot_paths: List[Path] = []
+def _plot_explanations(explanations: List[dict], plot_dir: Path) -> List[tuple[int, Path, Path]]:
+    plot_paths: List[tuple[int, Path, Path]] = []
     for item in explanations:
-        path = plot_dir / f"explanation_{item['step']:03d}.png"
-        _plot_explanation(item, path)
-        plot_paths.append(path)
+        step = item["step"]
+        rudder_path = plot_dir / f"explanation_rudder_{step:03d}.png"
+        throttle_path = plot_dir / f"explanation_throttle_{step:03d}.png"
+        _plot_explanation(
+            item["rudder"],
+            rudder_path,
+            title=f"Step {step:03d} — rudder output {item['rudder']['prediction']:.3f}",
+        )
+        _plot_explanation(
+            item["throttle"],
+            throttle_path,
+            title=(
+                f"Step {step:03d} — throttle {THROTTLE_LABELS[item['throttle']['prediction']]} "
+                f"(p={max(item['throttle']['probabilities']):.2f})"
+            ),
+        )
+        plot_paths.append((step, rudder_path, throttle_path))
     return plot_paths
 
 
@@ -261,11 +284,9 @@ def _combine_images(scene_path: Path, plot_path: Path, output_path: Path) -> Non
 
 def _combine_frames(frame_dir: Path, plot_dir: Path, combined_dir: Path) -> List[Path]:
     combined: List[Path] = []
-    # Sort frames numerically to avoid lexicographic ordering (e.g., 1000 before
-    # 200) when step indices exceed the padding width.
     for frame_path in sorted(frame_dir.glob("frame_*.png"), key=lambda p: int(p.stem.split("_")[-1])):
         step = frame_path.stem.split("_")[-1]
-        plot_path = plot_dir / f"explanation_{step}.png"
+        plot_path = plot_dir / f"explanation_rudder_{step}.png"
         if not plot_path.exists():
             continue
         output_path = combined_dir / f"combined_{step}.png"
@@ -291,40 +312,69 @@ def _generate_lime(
         return []
 
     features = np.asarray([item["features"] for item in trace], dtype=float)
-    wrapper = LimeNetworkWrapper(network)
-    explainer = lime_tabular.LimeTabularExplainer(
+    rudder_wrapper = LimeRudderWrapper(network)
+    throttle_wrapper = LimeThrottleWrapper(network)
+    rudder_explainer = lime_tabular.LimeTabularExplainer(
         training_data=features,
         feature_names=FEATURE_NAMES,
-        class_names=ACTION_LABELS,
+        mode="regression",
+        discretize_continuous=False,
+    )
+    throttle_explainer = lime_tabular.LimeTabularExplainer(
+        training_data=features,
+        feature_names=FEATURE_NAMES,
+        class_names=THROTTLE_LABELS,
         discretize_continuous=False,
     )
 
     explanations: List[dict] = []
     for item in trace:
-        probs = wrapper.predict_proba(np.asarray([item["features"]], dtype=float))[0]
-        exp = explainer.explain_instance(
-            np.asarray(item["features"], dtype=float),
-            wrapper.predict_proba,
+        feature_vec = np.asarray(item["features"], dtype=float)
+        rudder_pred = float(rudder_wrapper.predict(np.asarray([feature_vec]))[0])
+        rudder_exp = rudder_explainer.explain_instance(
+            feature_vec,
+            rudder_wrapper.predict,
             num_features=len(FEATURE_NAMES),
-            top_labels=1,
         )
-        label = item["predicted_action"]
-        attribution = [
+        rudder_map = next(iter(rudder_exp.as_map().values()), [])
+        rudder_attr = [
             {
                 "feature": FEATURE_NAMES[idx],
                 "weight": float(weight),
-                "value": float(item["features"][idx]),
+                "value": float(feature_vec[idx]),
             }
-            for idx, weight in exp.as_map()[label]
+            for idx, weight in rudder_map
         ]
+
+        throttle_probs = throttle_wrapper.predict_proba(np.asarray([feature_vec]))[0]
+        throttle_label = int(np.argmax(throttle_probs))
+        throttle_exp = throttle_explainer.explain_instance(
+            feature_vec,
+            throttle_wrapper.predict_proba,
+            num_features=len(FEATURE_NAMES),
+            top_labels=1,
+        )
+        throttle_map = throttle_exp.as_map().get(throttle_label, [])
+        throttle_attr = [
+            {
+                "feature": FEATURE_NAMES[idx],
+                "weight": float(weight),
+                "value": float(feature_vec[idx]),
+            }
+            for idx, weight in throttle_map
+        ]
+
         explanation = {
             "step": item["step"],
-            "predicted_action": label,
-            "action_label": ACTION_LABELS[label],
-            "input_features": item["features"],
-            "network_outputs": item["outputs"],
-            "predicted_probabilities": probs.tolist(),
-            "feature_attributions": attribution,
+            "rudder": {
+                "prediction": rudder_pred,
+                "feature_attributions": rudder_attr,
+            },
+            "throttle": {
+                "prediction": throttle_label,
+                "probabilities": throttle_probs.tolist(),
+                "feature_attributions": throttle_attr,
+            },
         }
         explanations.append(explanation)
         _write_json(scenario_dir / f"lime_step_{item['step']:03d}.json", explanation)
@@ -345,7 +395,7 @@ def explain_scenarios(
     scenarios: Iterable[EncounterScenario],
     hparams: HyperParameters,
     boat_params: BoatParams,
-    turn_cfg: TurnSessionConfig,
+    rudder_cfg: RudderParams,
     env_cfg: EnvConfig,
     output_dir: Path,
 ) -> None:
@@ -365,7 +415,7 @@ def explain_scenarios(
         frame_dir = scenario_dir / FRAME_DIRNAME
         plot_dir = scenario_dir / PLOT_DIRNAME
         combined_dir = scenario_dir / COMBINED_DIRNAME
-        env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, tcfg=turn_cfg)
+        env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, rudder_cfg=rudder_cfg)
         trace: List[dict] = []
         try:
             recorder = _trace_recorder(trace)
@@ -425,7 +475,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         parser.error(f"Winner file '{winner_path}' does not exist.")
 
     boat_params = build_boat_params(hparams)
-    turn_cfg = build_turn_config(hparams)
+    rudder_cfg = build_rudder_config(hparams)
     env_cfg = build_env_config(hparams, render=True)
 
     explain_scenarios(
@@ -434,7 +484,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         scenarios=scenarios,
         hparams=hparams,
         boat_params=boat_params,
-        turn_cfg=turn_cfg,
+        rudder_cfg=rudder_cfg,
         env_cfg=env_cfg,
         output_dir=output_dir,
     )

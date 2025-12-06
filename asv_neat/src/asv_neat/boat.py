@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from typing import Optional, Tuple
 
-from .config import BoatParams, TurnSessionConfig
+from .config import BoatParams, RudderParams
 from .utils import clamp, wrap_pi
 
 
@@ -19,7 +19,7 @@ class Boat:
         heading: float,
         speed: float,
         kin: BoatParams,
-        tcfg: TurnSessionConfig,
+        rudder_cfg: RudderParams,
         goal: Optional[Tuple[float, float]] = None,
     ) -> None:
         self.id = boat_id
@@ -28,7 +28,7 @@ class Boat:
         self.h = float(heading)
         self.u = float(speed)
         self.kin = kin
-        self.tcfg = tcfg
+        self.rudder_cfg = rudder_cfg
         if goal is not None:
             gx, gy = goal
             self.goal_x = float(gx)
@@ -37,8 +37,9 @@ class Boat:
             self.goal_x = None
             self.goal_y = None
 
+        self.rudder = 0.0
         self.last_thr = 0
-        self.last_helm = 0
+        self.last_rudder_cmd = 0.0
 
     # ------------------------------------------------------------------
     # State helpers
@@ -52,29 +53,34 @@ class Boat:
             "y": self.y,
             "heading": self.h,
             "speed": self.u,
+            "rudder": self.rudder,
             "goal_x": self.goal_x,
             "goal_y": self.goal_y,
         }
 
     @staticmethod
-    def decode_action(action: int) -> Tuple[int, int]:
-        """Map an action index to discrete ``(steer, throttle)`` selections."""
+    def decode_action(action) -> Tuple[float, int]:
+        """Clamp and unpack ``(rudder_command, throttle)`` selections."""
 
-        steer = action // 3  # 0: straight, 1: port, 2: starboard
-        throttle = action % 3  # 0: hold, 1: accelerate, 2: decelerate
-        return steer, throttle
+        rudder_cmd, throttle = action
+        rudder_cmd = clamp(float(rudder_cmd), -1.0, 1.0)
+        throttle_i = clamp(int(round(throttle)), 0, 2)
+        return rudder_cmd, throttle_i
 
-    def apply_action(self, action: int) -> None:
-        steer, throttle = self.decode_action(action)
-        self.last_helm = steer
+    def apply_action(self, action) -> None:
+        rudder_cmd, throttle = self.decode_action(action)
+        self.last_rudder_cmd = rudder_cmd
         self.last_thr = throttle
 
     def integrate(self, dt: float) -> None:
-        if self.u > 0.0:
-            turn_rate = math.radians(self.tcfg.turn_rate_degps)
-            direction = -1 if self.last_helm == 1 else 1 if self.last_helm == 2 else 0
-            if direction:
-                self.h = wrap_pi(self.h + direction * turn_rate * dt)
+        max_step = self.rudder_cfg.max_rudder_rate * dt
+        rudder_target = clamp(self.last_rudder_cmd, -1.0, 1.0) * self.rudder_cfg.max_rudder
+        delta = rudder_target - self.rudder
+        delta = clamp(delta, -max_step, max_step)
+        self.rudder += delta
+
+        yaw_rate = (self.rudder / self.rudder_cfg.max_rudder) * self.rudder_cfg.max_yaw_rate
+        self.h = wrap_pi(self.h + yaw_rate * dt)
 
         if self.last_thr == 1:
             self.u += self.kin.accel_rate * dt
