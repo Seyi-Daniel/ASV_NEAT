@@ -306,10 +306,11 @@ The script:
    `combined_reports/01_crossing/lime_shap_explanation_animation.gif`, with
    frame rate controlled by `--fps` (default `8`).
 
-Each composite frame places the simulation render on the left and arranges the
-plots on the right (LIME/SHAP rudder on the top row, LIME/SHAP throttle on the
-bottom row). The script tolerates minor height differences between the scene
-and plots, padding with whitespace rather than distorting images.
+Each composite frame keeps the simulation render prominent at the top and
+stacks a 2×2 grid of plots underneath (LIME/SHAP rudder on the top row,
+LIME/SHAP throttle on the bottom row). The script normalises plot widths to fit
+cleanly beneath the scene and pads with whitespace rather than distorting
+images.
 
 ---
 

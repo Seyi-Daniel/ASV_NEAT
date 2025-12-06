@@ -47,16 +47,23 @@ def _extract_steps(frame_dir: Path) -> List[int]:
     return sorted(set(steps))
 
 
-def _load_and_resize_plots(plot_paths: Iterable[Path]) -> List[Image.Image]:
+def _load_and_resize_plots(plot_paths: Iterable[Path], target_width: int) -> List[Image.Image]:
     images = [Image.open(path).convert("RGB") for path in plot_paths]
-    max_width = max(img.width for img in images)
-    max_height = max(img.height for img in images)
-    resized = []
-    for img in images:
-        if img.size == (max_width, max_height):
-            resized.append(img)
+    resized: List[Image.Image] = []
+    target_width = max(1, target_width)
+
+    target_heights = [int(img.height * target_width / img.width) for img in images]
+    max_height = max(target_heights)
+
+    for img, height in zip(images, target_heights, strict=True):
+        scaled = img.resize((target_width, max(height, 1)), Image.LANCZOS)
+        if scaled.height < max_height:
+            padded = Image.new("RGB", (target_width, max_height), color=(255, 255, 255))
+            offset_y = (max_height - scaled.height) // 2
+            padded.paste(scaled, (0, offset_y))
+            resized.append(padded)
         else:
-            resized.append(img.resize((max_width, max_height), Image.LANCZOS))
+            resized.append(scaled)
     return resized
 
 
@@ -68,29 +75,31 @@ def _compose_frame(
     shap_throttle_path: Path,
 ) -> Image.Image:
     scene = Image.open(scene_path).convert("RGB")
+    base_plot_width = max(scene.width // 2, 1) if scene.width else 1
     plots = _load_and_resize_plots(
-        [lime_rudder_path, shap_rudder_path, lime_throttle_path, shap_throttle_path]
+        [lime_rudder_path, shap_rudder_path, lime_throttle_path, shap_throttle_path],
+        target_width=base_plot_width,
     )
 
     plot_width, plot_height = plots[0].width, plots[0].height
-    right_panel_width = plot_width * 2
-    right_panel_height = plot_height * 2
+    grid_width = plot_width * 2
+    grid_height = plot_height * 2
 
-    canvas_width = scene.width + right_panel_width
-    canvas_height = max(scene.height, right_panel_height)
+    canvas_width = max(scene.width, grid_width)
+    margin = 10
+    canvas_height = scene.height + margin + grid_height
     canvas = Image.new("RGB", (canvas_width, canvas_height), color=(255, 255, 255))
 
-    left_y = (canvas_height - scene.height) // 2 if canvas_height > scene.height else 0
-    canvas.paste(scene, (0, left_y))
+    scene_x = (canvas_width - scene.width) // 2 if canvas_width > scene.width else 0
+    canvas.paste(scene, (scene_x, 0))
 
-    right_x = scene.width
-    top_y = (canvas_height - right_panel_height) // 2 if canvas_height > right_panel_height else 0
-
+    grid_x = (canvas_width - grid_width) // 2 if canvas_width > grid_width else 0
+    grid_y = scene.height + margin
     positions = [
-        (right_x, top_y),
-        (right_x + plot_width, top_y),
-        (right_x, top_y + plot_height),
-        (right_x + plot_width, top_y + plot_height),
+        (grid_x, grid_y),
+        (grid_x + plot_width, grid_y),
+        (grid_x, grid_y + plot_height),
+        (grid_x + plot_width, grid_y + plot_height),
     ]
 
     for plot, position in zip(plots, positions, strict=True):
