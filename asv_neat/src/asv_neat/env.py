@@ -161,6 +161,51 @@ class CrossingScenarioEnv:
                     pygame.quit()
                     raise SystemExit
 
+    def _draw_arrow(
+        self,
+        surf,
+        start: tuple[int, int],
+        end: tuple[int, int],
+        color: tuple[int, int, int],
+        width: int = 2,
+        head_len: float = 8.0,
+        head_width: float = 5.0,
+        direction: str = "forward",
+    ) -> None:
+        """Draw a simple line with an optional arrowhead.
+
+        ``direction`` selects where to place the arrow tip:
+        ``"forward"`` puts it at ``end`` (default),
+        ``"backward"`` at ``start``, and ``"none"`` omits it.
+        """
+
+        if not HAS_PYGAME:
+            return
+
+        pygame.draw.line(surf, color, start, end, width)
+
+        if direction == "none":
+            return
+
+        dx = end[0] - start[0]
+        dy = end[1] - start[1]
+        length = math.hypot(dx, dy)
+        if length < 1e-6:
+            return
+
+        ux, uy = dx / length, dy / length
+        if direction == "backward":
+            tip = start
+        else:
+            tip = end
+
+        left = (tip[0] - ux * head_len - uy * head_width, tip[1] - uy * head_len + ux * head_width)
+        right = (
+            tip[0] - ux * head_len + uy * head_width,
+            tip[1] - uy * head_len - ux * head_width,
+        )
+        pygame.draw.polygon(surf, color, [tip, left, right])
+
     def _draw_ship(self, surf, boat: Boat, color) -> None:
         if not HAS_PYGAME:
             return
@@ -177,6 +222,83 @@ class CrossingScenarioEnv:
         pygame.draw.circle(
             surf, (255, 255, 255), (self.sx(boat.x), self.sy(boat.y)), radius * 2.2, 1
         )
+
+        heading_start = pts[0]
+        heading_len = 5 * Lm
+        heading_end = (
+            self.sx(boat.x + (0.5 * Lm + heading_len) * ch),
+            self.sy(boat.y + (0.5 * Lm + heading_len) * sh),
+        )
+        pygame.draw.line(surf, (255, 255, 255), heading_start, heading_end, 2)
+
+        stern_x = boat.x - 0.5 * Lm * ch
+        stern_y = boat.y - 0.5 * Lm * sh
+        rudder_len = 5 * Lm
+        rudder_angle = boat.h + boat.rudder
+        rudder_ch, rudder_sh = math.cos(rudder_angle), math.sin(rudder_angle)
+        rudder_start = (self.sx(stern_x), self.sy(stern_y))
+        rudder_end = (
+            self.sx(stern_x - rudder_len * rudder_ch),
+            self.sy(stern_y - rudder_len * rudder_sh),
+        )
+        pygame.draw.line(surf, (235, 200, 120), rudder_start, rudder_end, 2)
+
+        dx = rudder_end[0] - rudder_start[0]
+        dy = rudder_end[1] - rudder_start[1]
+        length = math.hypot(dx, dy)
+        if length >= 1e-6:
+            ux, uy = dx / length, dy / length
+
+            if boat.last_thr in (1, 2):
+                mid_x = 0.5 * (rudder_start[0] + rudder_end[0])
+                mid_y = 0.5 * (rudder_start[1] + rudder_end[1])
+                arrow_len = 14.0
+                p1 = (
+                    mid_x - 0.5 * arrow_len * ux,
+                    mid_y - 0.5 * arrow_len * uy,
+                )
+                p2 = (
+                    mid_x + 0.5 * arrow_len * ux,
+                    mid_y + 0.5 * arrow_len * uy,
+                )
+
+                if boat.last_thr == 1:  # acceleration
+                    start, end = p1, p2
+                else:  # deceleration
+                    start, end = p2, p1
+                self._draw_arrow(
+                    surf,
+                    (int(round(start[0])), int(round(start[1]))),
+                    (int(round(end[0])), int(round(end[1]))),
+                    (255, 255, 255),
+                    width=2,
+                    direction="forward",
+                )
+
+            eps = 1e-4
+            if abs(boat.last_rudder_cmd) > eps:
+                # unit vector along rudder line (start -> end)
+                # normals to rudder line
+                left_normal  = (-uy,  ux)
+                right_normal = ( uy, -ux)
+
+                normal = left_normal if boat.last_rudder_cmd > 0 else right_normal
+
+                rc_len = 12.0
+
+                # BASE AT THE BOTTOM OF THE RUDDER LINE
+                base_x, base_y = float(rudder_end[0]), float(rudder_end[1])
+                tip_x = base_x + rc_len * normal[0]
+                tip_y = base_y + rc_len * normal[1]
+
+                self._draw_arrow(
+                    surf,
+                    (int(round(tip_x)), int(round(tip_y))),   # base at bottom
+                    (int(round(base_x)),  int(round(base_y))),    # arrow points outward
+                    (235, 200, 120),
+                    width=2,
+                    direction="forward",  # tip at 'end' (tip_x, tip_y)
+                )
         if self._font:
             name = "ASV" if boat.id == 0 else "Target Vessel"
             label = self._font.render(name, True, (255, 255, 255))
