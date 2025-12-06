@@ -277,7 +277,7 @@ class CrossingScenarioEnv:
                     direction="forward",
                 )
 
-            eps = 1e-3
+            eps = 1e-6
             rudder_delta = boat.last_rudder_cmd - boat.prev_rudder_cmd
             if abs(rudder_delta) > eps:
                 # unit vector along rudder line (start -> end)
