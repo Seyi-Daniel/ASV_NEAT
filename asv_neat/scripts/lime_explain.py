@@ -86,7 +86,8 @@ FEATURE_NAMES: List[str] = [
 FRAME_DIRNAME = "frames"
 PLOT_DIRNAME = "plots"
 COMBINED_DIRNAME = "combined_frames"
-ANIMATION_FILENAME = "explanation_animation.gif"
+RUDDER_ANIMATION_FILENAME = "explanation_rudder_animation.gif"
+THROTTLE_ANIMATION_FILENAME = "explanation_throttle_animation.gif"
 
 
 THROTTLE_LABELS: List[str] = ["hold speed", "accelerate", "decelerate"]
@@ -301,14 +302,16 @@ def _combine_images(scene_path: Path, plot_path: Path, output_path: Path) -> Non
     canvas.save(output_path)
 
 
-def _combine_frames(frame_dir: Path, plot_dir: Path, combined_dir: Path) -> List[Path]:
+def _combine_frames(
+    frame_dir: Path, plot_dir: Path, combined_dir: Path, *, kind: str
+) -> List[Path]:
     combined: List[Path] = []
     for frame_path in sorted(frame_dir.glob("frame_*.png"), key=lambda p: int(p.stem.split("_")[-1])):
         step = frame_path.stem.split("_")[-1]
-        plot_path = plot_dir / f"explanation_rudder_{step}.png"
+        plot_path = plot_dir / f"explanation_{kind}_{step}.png"
         if not plot_path.exists():
             continue
-        output_path = combined_dir / f"combined_{step}.png"
+        output_path = combined_dir / f"combined_{kind}_{step}.png"
         _combine_images(frame_path, plot_path, output_path)
         combined.append(output_path)
     return combined
@@ -459,8 +462,16 @@ def explain_scenarios(
         _write_json(scenario_dir / "trace.json", trace)
         explanations = _generate_lime(scenario_dir, trace, network)
         _plot_explanations(explanations, plot_dir)
-        combined_frames = _combine_frames(frame_dir, plot_dir, combined_dir)
-        _write_animation(combined_frames, scenario_dir / ANIMATION_FILENAME)
+        combined_rudder_frames = _combine_frames(
+            frame_dir, plot_dir, combined_dir / "rudder", kind="rudder"
+        )
+        combined_throttle_frames = _combine_frames(
+            frame_dir, plot_dir, combined_dir / "throttle", kind="throttle"
+        )
+        _write_animation(combined_rudder_frames, scenario_dir / RUDDER_ANIMATION_FILENAME)
+        _write_animation(
+            combined_throttle_frames, scenario_dir / THROTTLE_ANIMATION_FILENAME
+        )
         print(
             f"Scenario {idx:02d} [{scenario.kind.value}] steps={metrics.steps:4d} "
             f"cost={cost:7.2f} outputs saved to {scenario_dir}"
