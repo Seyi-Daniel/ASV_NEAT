@@ -35,7 +35,7 @@ class Boat:
             self.goal_y = float(gy)
         else:
             self.goal_x = None
-        self.goal_y = None
+            self.goal_y = None
 
         self.rudder = 0.0
         self.last_thr = 0

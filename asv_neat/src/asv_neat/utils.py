@@ -32,16 +32,20 @@ def euclidean_distance(ax: float, ay: float, bx: float, by: float) -> float:
 def goal_distance(state: dict) -> float:
     """Distance from the vessel to its goal, falling back to the current position."""
 
-    gx = float(state.get("goal_x", state["x"]))
-    gy = float(state.get("goal_y", state["y"]))
+    gx_val = state.get("goal_x")
+    gy_val = state.get("goal_y")
+    gx = float(state["x"]) if gx_val is None else float(gx_val)
+    gy = float(state["y"]) if gy_val is None else float(gy_val)
     return euclidean_distance(float(state["x"]), float(state["y"]), gx, gy)
 
 
 def heading_error_deg(state: dict) -> float:
     """Absolute heading error between the vessel's course and the goal direction."""
 
-    gx = float(state.get("goal_x", state["x"]))
-    gy = float(state.get("goal_y", state["y"]))
+    gx_val = state.get("goal_x")
+    gy_val = state.get("goal_y")
+    gx = float(state["x"]) if gx_val is None else float(gx_val)
+    gy = float(state["y"]) if gy_val is None else float(gy_val)
     x = float(state["x"])
     y = float(state["y"])
     dx = gx - x
