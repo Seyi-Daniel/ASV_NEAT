@@ -229,12 +229,7 @@ class CrossingScenarioEnv:
             self.sx(boat.x + (0.5 * Lm + heading_len) * ch),
             self.sy(boat.y + (0.5 * Lm + heading_len) * sh),
         )
-        throttle_dir = "none"
-        if boat.last_thr == 1:
-            throttle_dir = "forward"
-        elif boat.last_thr == 2:
-            throttle_dir = "backward"
-        self._draw_arrow(surf, heading_start, heading_end, (255, 255, 255), width=2, direction=throttle_dir)
+        pygame.draw.line(surf, (255, 255, 255), heading_start, heading_end, 2)
 
         stern_x = boat.x - 0.5 * Lm * ch
         stern_y = boat.y - 0.5 * Lm * sh
@@ -246,21 +241,30 @@ class CrossingScenarioEnv:
             self.sx(stern_x - rudder_len * rudder_ch),
             self.sy(stern_y - rudder_len * rudder_sh),
         )
-        rudder_dir = "none"
-        if boat.last_rudder_cmd > 1e-3:
-            rudder_dir = "forward"
-        elif boat.last_rudder_cmd < -1e-3:
-            rudder_dir = "backward"
-        self._draw_arrow(
-            surf,
-            rudder_start,
-            rudder_end,
-            (235, 200, 120),
-            width=2,
-            head_len=7,
-            head_width=5,
-            direction=rudder_dir,
-        )
+        pygame.draw.line(surf, (235, 200, 120), rudder_start, rudder_end, 2)
+
+        if boat.last_thr in (1, 2):
+            dx = rudder_end[0] - rudder_start[0]
+            dy = rudder_end[1] - rudder_start[1]
+            length = math.hypot(dx, dy)
+            if length >= 1e-6:
+                ux, uy = dx / length, dy / length
+                if boat.last_thr == 1:
+                    ux, uy = -ux, -uy
+                arrow_len = 7.0
+                head_width = 5.0
+                tip = rudder_start
+                base = (tip[0] - ux * arrow_len, tip[1] - uy * arrow_len)
+                pygame.draw.line(surf, (235, 200, 120), base, tip, 2)
+                left = (
+                    tip[0] - ux * arrow_len - uy * head_width,
+                    tip[1] - uy * arrow_len + ux * head_width,
+                )
+                right = (
+                    tip[0] - ux * arrow_len + uy * head_width,
+                    tip[1] - uy * arrow_len - ux * head_width,
+                )
+                pygame.draw.polygon(surf, (235, 200, 120), [tip, left, right])
         if self._font:
             name = "ASV" if boat.id == 0 else "Target Vessel"
             label = self._font.render(name, True, (255, 255, 255))
