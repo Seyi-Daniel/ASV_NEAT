@@ -275,6 +275,42 @@ shap_reports/
     └── explanation_animation.gif  # combined render + bar plot per step
 ```
 
+### Building a combined LIME+SHAP animation
+
+After running the individual LIME and SHAP explainers you can stitch their
+outputs into a side-by-side animation that pairs every simulation frame with a
+2×2 grid of rudder/throttle attribution plots. The helper script automatically
+discovers the relevant subdirectories (frames and plots) inside each run so you
+do **not** need to hard-code names like `frames/` or `plots/`:
+
+```bash
+python asv_neat/scripts/combine_lime_shap_animation.py \
+  --lime-dir lime_reports/01_crossing \
+  --shap-dir shap_reports/01_crossing \
+  --output-dir combined_reports/01_crossing \
+  --fps 10
+```
+
+The script:
+
+1. Searches the provided LIME/SHAP scenario folders for the frame files
+   (`frame_000.png`, …) and the explanation plots
+   (`explanation_rudder_000.png` / `explanation_throttle_000.png`). The search
+   relies on existing repository constants/layout rather than fixed directory
+   names.
+2. Identifies step indices available in the frame set and keeps only those
+   where **all** four plots (LIME/SHAP × rudder/throttle) exist.
+3. Builds composite frames in `combined_frames/` under the chosen output
+   directory, named `combined_000.png`, `combined_001.png`, …
+4. Emits a final GIF at
+   `combined_reports/01_crossing/lime_shap_explanation_animation.gif`, with
+   frame rate controlled by `--fps` (default `8`).
+
+Each composite frame places the simulation render on the left and arranges the
+plots on the right (LIME/SHAP rudder on the top row, LIME/SHAP throttle on the
+bottom row). The script tolerates minor height differences between the scene
+and plots, padding with whitespace rather than distorting images.
+
 ---
 
 ## Cost function overview
