@@ -93,7 +93,7 @@ THROTTLE_ANIMATION_FILENAME = "explanation_throttle_animation.gif"
 THROTTLE_LABELS: List[str] = ["hold speed", "accelerate", "decelerate"]
 
 
-def _rudder_delta_action(current: float, previous: float, eps: float = 1e-3) -> str:
+def _rudder_delta_action(current: float, previous: float, eps: float = 1e-6) -> str:
     """Determine turn action based on difference in rudder outputs."""
 
     delta = current - previous
