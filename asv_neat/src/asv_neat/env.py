@@ -407,10 +407,9 @@ class CrossingScenarioEnv:
         if self._debug_overlay:
             step_info = self._debug_overlay
             lines.append(
-                "  rudder_cmd_for_arrow "
-                f"{step_info.get('rudder_cmd_for_arrow', 0.0):+5.2f} "
-                f"model_cmd {step_info.get('rudder_cmd_raw', 0.0):+5.2f} "
-                f"step {step_info.get('step', self.step_index)}"
+                 " Rudder_cmd: "
+                f"{step_info.get('rudder_cmd_for_arrow', 0.0) * 35:+5.2f}  "
+                f"step: {step_info.get('step', self.step_index)}"
             )
         scenario_kind = self._meta.get("scenario_kind")
         if scenario_kind:
