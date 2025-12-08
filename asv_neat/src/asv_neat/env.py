@@ -259,14 +259,14 @@ class CrossingScenarioEnv:
 
         # Draw commanded rudder arrow relative to the boat heading.
         cmd = getattr(boat, "last_rudder_cmd", 0.0)
-        if abs(cmd) > 1e-6:
+        if abs(cmd) > 1e-3:
             # perpendicular to heading: port is left (positive cmd), starboard is right (negative cmd)
             perp_x = -math.sin(boat.h)
             perp_y = math.cos(boat.h)
             direction_sign = 1.0 if cmd > 0 else -1.0
             # choose a base arrow length and scale by command magnitude
             base_len = 12.0  # pixels in world space (can adjust)
-            arrow_len = base_len * abs(cmd)
+            arrow_len = 3 * base_len * abs(cmd)
             base_x, base_y = stern_x, stern_y
             end_x = base_x + direction_sign * arrow_len * perp_x
             end_y = base_y + direction_sign * arrow_len * perp_y

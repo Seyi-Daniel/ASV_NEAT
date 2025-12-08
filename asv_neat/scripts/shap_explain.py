@@ -97,7 +97,7 @@ THROTTLE_LABELS: List[str] = ["hold speed", "accelerate", "decelerate"]
 
 def _format_rudder_angle(angle_rad: float) -> str:
     angle_deg = math.degrees(angle_rad)
-    if abs(angle_deg) < 1e-6:
+    if abs(angle_deg) < 1e-3:
         return "0.0"
     return f"{angle_deg:+.1f}"
 
