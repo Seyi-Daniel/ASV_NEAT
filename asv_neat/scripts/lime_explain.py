@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import pickle
 import sys
 from dataclasses import asdict
@@ -67,6 +68,7 @@ from asv_neat.env import CrossingScenarioEnv  # noqa: E402
 from asv_neat.neat_training import TraceCallback  # noqa: E402
 from asv_neat.scenario import EncounterScenario  # noqa: E402
 from asv_neat.paths import default_winner_path  # noqa: E402
+from asv_neat.utils import helm_label_from_rudder_cmd  # noqa: E402
 
 FEATURE_NAMES: List[str] = [
     "x_goal_TV",
@@ -93,31 +95,11 @@ THROTTLE_ANIMATION_FILENAME = "explanation_throttle_animation.gif"
 THROTTLE_LABELS: List[str] = ["hold speed", "accelerate", "decelerate"]
 
 
-def _rudder_delta_action(current: float, previous: float, eps: float = 1e-6) -> str:
-    """Determine turn action based on difference in rudder outputs."""
-
-    delta = current - previous
-    if delta < -eps:
-        return "turn port"
-    if delta > eps:
-        return "turn starboard"
-    return "hold course"
-
-
-def _rudder_angle_and_action(raw_output: float, previous_output: float) -> tuple[float, str]:
-    # assume raw_output is in [-1, 1] and map to [-35°, +35°]
-    clamped = max(-1.0, min(1.0, raw_output))
-    angle = clamped * 35.0
-    if abs(angle) < 1e-6:
-        angle = 0.0
-    action = _rudder_delta_action(clamped, max(-1.0, min(1.0, previous_output)))
-    return angle, action
-
-
-def _format_rudder_angle(angle: float) -> str:
-    if abs(angle) < 1e-6:
+def _format_rudder_angle(angle_rad: float) -> str:
+    angle_deg = math.degrees(angle_rad)
+    if abs(angle_deg) < 1e-6:
         return "0.0"
-    return f"{angle:+.1f}"
+    return f"{angle_deg:+.1f}"
 
 
 def _throttle_distribution(throttle_val: float) -> np.ndarray:
@@ -206,26 +188,10 @@ def _build_parser(hparams: HyperParameters) -> argparse.ArgumentParser:
 
 
 def _trace_recorder(container: List[dict]) -> TraceCallback:
-    def _record(
-        step_idx: int,
-        features: List[float],
-        outputs,
-        rudder_cmd: float,
-        throttle: int,
-        agent_state: dict,
-        stand_on_state: Optional[dict],
-    ) -> None:
-        container.append(
-            {
-                "step": step_idx,
-                "features": features,
-                "outputs": list(outputs),
-                "rudder_cmd": float(rudder_cmd),
-                "throttle": int(throttle),
-                "agent_state": agent_state,
-                "stand_on_state": stand_on_state,
-            }
-        )
+    def _record(payload: dict) -> None:
+        if "features" not in payload and "obs" in payload:
+            payload = {**payload, "features": list(payload["obs"])}
+        container.append(payload)
 
     return _record
 
@@ -280,19 +246,19 @@ def _plot_explanation(step_data: dict, output_path: Path, *, title: str) -> None
 
 def _plot_explanations(explanations: List[dict], plot_dir: Path) -> List[tuple[int, Path, Path]]:
     plot_paths: List[tuple[int, Path, Path]] = []
-    prev_rudder_output = 0.0
     for item in explanations:
         step = item["step"]
         rudder_path = plot_dir / f"explanation_rudder_{step:03d}.png"
         throttle_path = plot_dir / f"explanation_throttle_{step:03d}.png"
-        rudder_pred = item["rudder"]["prediction"]
-        rudder_angle, rudder_action = _rudder_angle_and_action(rudder_pred, prev_rudder_output)
+        rudder_info = item["rudder"]
+        actual_rudder = float(rudder_info.get("actual_rudder", 0.0))
+        helm_label = rudder_info.get("helm_label") or "keep_straight"
         _plot_explanation(
-            item["rudder"],
+            rudder_info,
             rudder_path,
             title=(
-                f"Step: {step:03d}  Rudder angle: {_format_rudder_angle(rudder_angle)}° "
-                f"Turn action: {rudder_action}"
+                f"Step: {step:03d}  Rudder angle: {_format_rudder_angle(actual_rudder)}° "
+                f"Turn action: {helm_label.replace('_', ' ')}"
             ),
         )
         _plot_explanation(
@@ -303,7 +269,6 @@ def _plot_explanations(explanations: List[dict], plot_dir: Path) -> List[tuple[i
                 f"{THROTTLE_LABELS[item['throttle']['prediction']]}"
             ),
         )
-        prev_rudder_output = rudder_pred
         plot_paths.append((step, rudder_path, throttle_path))
     return plot_paths
 
@@ -350,7 +315,9 @@ def _generate_lime(
     if not trace:
         return []
 
-    features = np.asarray([item["features"] for item in trace], dtype=float)
+    features = np.asarray(
+        [item.get("features") or item.get("obs") or [] for item in trace], dtype=float
+    )
     rudder_wrapper = LimeRudderWrapper(network)
     throttle_wrapper = LimeThrottleWrapper(network)
     rudder_explainer = lime_tabular.LimeTabularExplainer(
@@ -368,7 +335,8 @@ def _generate_lime(
 
     explanations: List[dict] = []
     for item in trace:
-        feature_vec = np.asarray(item["features"], dtype=float)
+        features = item.get("features") or item.get("obs") or []
+        feature_vec = np.asarray(features, dtype=float)
         rudder_pred = float(rudder_wrapper.predict(np.asarray([feature_vec]))[0])
         rudder_exp = rudder_explainer.explain_instance(
             feature_vec,
@@ -403,10 +371,17 @@ def _generate_lime(
             for idx, weight in throttle_map
         ]
 
+        rudder_cmd = float(item.get("rudder_cmd", rudder_pred))
+        helm_label = item.get("helm_label") or helm_label_from_rudder_cmd(rudder_cmd)
+        actual_rudder = float(item.get("agent_state", {}).get("rudder", 0.0))
+
         explanation = {
             "step": item["step"],
             "rudder": {
                 "prediction": rudder_pred,
+                "rudder_cmd": rudder_cmd,
+                "helm_label": helm_label,
+                "actual_rudder": actual_rudder,
                 "feature_attributions": rudder_attr,
             },
             "throttle": {

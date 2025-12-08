@@ -236,7 +236,10 @@ class CrossingScenarioEnv:
         stern_x = boat.x - 0.5 * Lm * ch
         stern_y = boat.y - 0.5 * Lm * sh
         rudder_len = 5 * Lm
-        rudder_angle = boat.h + boat.rudder
+        # Positive boat.rudder corresponds to a port turn (positive yaw).
+        # Draw the rudder deflection so that positive values show up on the
+        # "port" side of the wake in the viewer.
+        rudder_angle = boat.h - boat.rudder
         rudder_ch, rudder_sh = math.cos(rudder_angle), math.sin(rudder_angle)
         rudder_start = (self.sx(stern_x), self.sy(stern_y))
         rudder_end = (
@@ -264,6 +267,10 @@ class CrossingScenarioEnv:
                     mid_y + 0.5 * arrow_len * uy,
                 )
 
+                # Draw acceleration arrow along the rudder line (midpoint), pointing
+                # in the direction of motion when accelerating and opposite when
+                # decelerating. This makes it visually obvious when the throttle
+                # is adding or removing speed.
                 if boat.last_thr == 1:  # acceleration
                     start, end = p1, p2
                 else:  # deceleration
@@ -279,28 +286,31 @@ class CrossingScenarioEnv:
 
             eps = 1e-6
             rudder_delta = boat.last_rudder_cmd - boat.prev_rudder_cmd
-            if abs(rudder_delta) > eps:
-                # unit vector along rudder line (start -> end)
-                # normals to rudder line
+            if abs(rudder_delta) > eps and length >= 1e-6:
+                # unit vector along the rudder line (from base to tip)
+                ux, uy = dx / length, dy / length
+
+                # normals in screen space
                 left_normal  = (-uy,  ux)
                 right_normal = ( uy, -ux)
 
+                # Positive rudder_delta means "more port" command; draw the arrow
+                # on the port side of the rudder line. Negative means "more starboard".
                 normal = left_normal if rudder_delta > 0 else right_normal
 
                 rc_len = 12.0
-
-                # BASE AT THE BOTTOM OF THE RUDDER LINE
                 base_x, base_y = float(rudder_end[0]), float(rudder_end[1])
                 tip_x = base_x + rc_len * normal[0]
                 tip_y = base_y + rc_len * normal[1]
 
+                # Draw arrow starting at the base and pointing outwards
                 self._draw_arrow(
                     surf,
-                    (int(round(tip_x)), int(round(tip_y))),   # base at bottom
-                    (int(round(base_x)),  int(round(base_y))),    # arrow points outward
+                    (int(round(base_x)), int(round(base_y))),
+                    (int(round(tip_x)), int(round(tip_y))),
                     (235, 200, 120),
                     width=2,
-                    direction="forward",  # tip at 'end' (tip_x, tip_y)
+                    direction="forward",
                 )
         if self._font:
             name = "ASV" if boat.id == 0 else "Target Vessel"

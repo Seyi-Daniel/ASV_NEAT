@@ -104,3 +104,16 @@ def relative_bearing_deg(observer: dict, target: dict) -> float:
     rel_port = math.degrees(math.atan2(y_rel, x_rel))
     rel_port = (rel_port + 360.0) % 360.0
     return (360.0 - rel_port) % 360.0
+
+
+def helm_label_from_rudder_cmd(rudder_cmd: float, eps: float = 0.05) -> str:
+    """
+    Map a continuous rudder command in [-1, 1] to a categorical label:
+    "turn_port", "turn_starboard", or "keep_straight".
+    """
+
+    if rudder_cmd > eps:
+        return "turn_port"
+    if rudder_cmd < -eps:
+        return "turn_starboard"
+    return "keep_straight"
