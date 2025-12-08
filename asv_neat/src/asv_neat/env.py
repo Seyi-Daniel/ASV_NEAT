@@ -41,6 +41,7 @@ class CrossingScenarioEnv:
         self._meta: dict = {}
         self.time = 0.0
         self.step_index = 0
+        self._debug_overlay: Optional[dict] = None
 
         self._screen = None
         self._font = None
@@ -68,6 +69,9 @@ class CrossingScenarioEnv:
         if not self._screen and HAS_PYGAME:
             self.cfg.render = True
             self._setup_render()
+
+    def set_debug_overlay(self, overlay: Optional[dict]) -> None:
+        self._debug_overlay = overlay
 
     def close(self) -> None:
         if self._screen and HAS_PYGAME:
@@ -120,27 +124,44 @@ class CrossingScenarioEnv:
     # ------------------------------------------------------------------
     # Simulation loop
     # ------------------------------------------------------------------
-    def step(self, actions: Optional[Sequence[Optional[tuple[float, int]]]] = None) -> None:
+    def apply_actions(
+        self, actions: Optional[Sequence[Optional[tuple[float, int]]]] = None
+    ) -> None:
         if not self.ships:
             return
 
         if actions is None:
             actions = [None] * len(self.ships)
 
-        dt = float(self.cfg.dt)
-        substeps = max(1, int(self.cfg.substeps))
-        h = dt / substeps
+        for boat in self.ships:
+            boat.begin_step()
 
-        for _ in range(substeps):
-            for boat in self.ships:
-                boat.begin_step()
-            for boat, action in zip(self.ships, actions):
-                if action is not None:
-                    boat.apply_action(action)
+        for boat, action in zip(self.ships, actions):
+            if action is not None:
+                boat.apply_action(action)
+
+    def advance_applied_actions(
+        self, dt: Optional[float] = None, substeps: Optional[int] = None
+    ) -> None:
+        if not self.ships:
+            return
+
+        dt_val = float(self.cfg.dt if dt is None else dt)
+        substeps_val = max(1, int(self.cfg.substeps if substeps is None else substeps))
+        h = dt_val / substeps_val
+
+        for _ in range(substeps_val):
             for boat in self.ships:
                 boat.integrate(h)
             self.time += h
         self.step_index += 1
+
+    def step(self, actions: Optional[Sequence[Optional[tuple[float, int]]]] = None) -> None:
+        if not self.ships:
+            return
+
+        self.apply_actions(actions)
+        self.advance_applied_actions()
 
     # ------------------------------------------------------------------
     # Rendering
@@ -387,6 +408,15 @@ class CrossingScenarioEnv:
         lines = [
             f"FPS {fps:5.1f}   step {self.step_index}   t {self.time:6.2f}s",
         ]
+
+        if self._debug_overlay:
+            step_info = self._debug_overlay
+            lines.append(
+                "  rudder_cmd_for_arrow "
+                f"{step_info.get('rudder_cmd_for_arrow', 0.0):+5.2f} "
+                f"model_cmd {step_info.get('rudder_cmd_raw', 0.0):+5.2f} "
+                f"step {step_info.get('step', self.step_index)}"
+            )
         scenario_kind = self._meta.get("scenario_kind")
         if scenario_kind:
             lines.append(f"Scenario kind: {scenario_kind}")

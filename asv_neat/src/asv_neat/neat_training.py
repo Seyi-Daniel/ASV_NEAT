@@ -117,6 +117,7 @@ def simulate_episode(
 
         helm_label = helm_label_from_rudder_cmd(rudder_cmd)
         action = (rudder_cmd, throttle_i)
+        actions = [action, None]
 
         if trace_callback is not None:
             trace_callback(
@@ -136,13 +137,23 @@ def simulate_episode(
                 }
             )
 
-        env.step([action, None])
-        steps = step_idx + 1
-
         if render:
+            env.apply_actions(actions)
+            env.set_debug_overlay(
+                {
+                    "step": step_idx,
+                    "rudder_cmd_for_arrow": float(rudder_cmd),
+                    "rudder_cmd_raw": float(rudder_cmd_raw),
+                }
+            )
             env.render()
             if frame_callback is not None:
                 frame_callback(step_idx, getattr(env, "_screen", None))
+            env.advance_applied_actions()
+            env.set_debug_overlay(None)
+        else:
+            env.step(actions)
+        steps = step_idx + 1
 
         snapshot = env.snapshot()
         if not snapshot:
