@@ -169,10 +169,9 @@ that produced the saved genome.
 ## LIME explanation workflow
 
 The project ships with an end-to-end LIME pipeline (`scripts/lime_explain.py`)
-for analysing the controller’s per-step decisions. It couples a small update to
-`simulate_episode` (a trace callback hook) with a scikit-learn style wrapper
-around the NEAT network so the `lime` package can call `predict_proba` just like
-it would on a conventional classifier.
+for analysing the controller’s per-step decisions. Explanations now **reuse
+captured traces and render frames** from an earlier run instead of re-simulating
+each scenario, keeping the explanation phase fast and repeatable.
 
 ### Prerequisites
 
@@ -187,14 +186,23 @@ it would on a conventional classifier.
    matching NEAT config (defaults to `configs/neat_crossing.cfg`) is available so
    the genome can be re-instantiated.
 
-### Capturing traces
+### Capturing traces and frames for reuse
 
-`simulate_episode` now accepts `trace_callback`, which is invoked once per step
-with the 12-element observation vector, the raw network outputs, the arg-maxed
-action, and the full agent/stand-on state snapshots. The LIME script passes a
-recorder that caches these structures verbatim before the environment advances
-to the next tick, guaranteeing that the explanation phase sees the exact values
-used by the controller.
+Run the capture utility once to save traces, metadata and render frames for each
+deterministic scenario. The resulting folders are consumed by both the LIME and
+SHAP explainers:
+
+```bash
+python asv_neat/scripts/capture_episode_data.py \
+  --scenario-kind crossing \
+  --winner winners/crossing_winner.pkl \
+  --output-dir captured_episodes \
+  --hp max_steps=400  # optional overrides to mirror the training run
+```
+
+This writes per-scenario subdirectories (e.g. `captured_episodes/01_crossing/`)
+containing `metadata.json`, `trace.json`, and a `frames/` folder with
+`frame_000.png`, … files recorded during the replay.
 
 ### Running the explainer
 
@@ -202,6 +210,7 @@ used by the controller.
 python asv_neat/scripts/lime_explain.py \
   --scenario-kind crossing \
   --winner winners/crossing_winner.pkl \
+  --data-dir captured_episodes \
   --output-dir lime_reports \
   --hp max_steps=400  # optional overrides so the replay matches training
 ```
@@ -209,10 +218,10 @@ python asv_neat/scripts/lime_explain.py \
 For every deterministic scenario of the selected encounter family the script:
 
 1. Rebuilds the NEAT network from the pickle/config pair.
-2. Replays the encounter without rendering while recording the trace via the new
-   callback.
+2. Loads the previously captured `trace.json` and `frames/` for each scenario
+   from `--data-dir` instead of re-running the simulation.
 3. Computes summary metrics (steps, collision status, goal distance, COLREGs
-   penalties, etc.) and their aggregate cost.
+   penalties, etc.) and their aggregate cost using the captured metadata.
 4. Feeds the captured feature matrix through `lime.LimeTabularExplainer` using
    the built-in feature names and action labels, yielding a local explanation for
    every time-step.
@@ -240,10 +249,10 @@ per scenario type.
 ### SHAP explanation workflow
 
 For a global/stepwise view of feature importance, a parallel SHAP pipeline is
-available via `scripts/shap_explain.py`. It reuses the same trace capture hooks
-as the LIME script but feeds the feature matrix through `shap.KernelExplainer`
-so every timestep receives SHAP values, plots and a stitched animation alongside
-the environment render frames.
+available via `scripts/shap_explain.py`. It consumes the captured traces and
+frames from `capture_episode_data.py`, then feeds the feature matrix through
+`shap.KernelExplainer` so every timestep receives SHAP values, plots and a
+stitched animation alongside the environment render frames.
 
 #### Prerequisites
 
@@ -259,11 +268,14 @@ pip install shap
 python asv_neat/scripts/shap_explain.py \
   --scenario-kind crossing \
   --winner winners/crossing_winner.pkl \
+  --data-dir captured_episodes \
   --output-dir shap_reports \
   --hp max_steps=400  # optional overrides so the replay matches training
 ```
 
-Artefacts mirror the LIME layout with SHAP-specific filenames:
+Artefacts mirror the LIME layout with SHAP-specific filenames. Each scenario is
+loaded from the matching folder in `--data-dir` so explanations complete without
+running the simulator again:
 
 ```
 shap_reports/
