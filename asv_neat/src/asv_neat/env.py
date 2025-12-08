@@ -274,7 +274,7 @@ class CrossingScenarioEnv:
             self._draw_arrow(
                 surf,
                 (self.sx(base_x), self.sy(base_y)),
-                (self.sx(end_x), self.sy(end_y)),
+                (20 + self.sx(end_x), 20 + self.sy(end_y)),
                 (235, 200, 120),
                 width=2,
                 direction="forward",
