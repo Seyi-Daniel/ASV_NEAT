@@ -256,6 +256,30 @@ class CrossingScenarioEnv:
 
         stern_x = boat.x - 0.5 * Lm * ch
         stern_y = boat.y - 0.5 * Lm * sh
+
+        # Draw commanded rudder arrow relative to the boat heading.
+        cmd = getattr(boat, "last_rudder_cmd", 0.0)
+        if abs(cmd) > 1e-6:
+            # perpendicular to heading: port is left (positive cmd), starboard is right (negative cmd)
+            perp_x = -math.sin(boat.h)
+            perp_y = math.cos(boat.h)
+            direction_sign = 1.0 if cmd > 0 else -1.0
+            # choose a base arrow length and scale by command magnitude
+            base_len = 12.0  # pixels in world space (can adjust)
+            arrow_len = base_len * abs(cmd)
+            base_x, base_y = stern_x, stern_y
+            end_x = base_x + direction_sign * arrow_len * perp_x
+            end_y = base_y + direction_sign * arrow_len * perp_y
+            # draw arrow from the stern (screen coordinates)
+            self._draw_arrow(
+                surf,
+                (self.sx(base_x), self.sy(base_y)),
+                (self.sx(end_x), self.sy(end_y)),
+                (235, 200, 120),
+                width=2,
+                direction="forward",
+            )
+
         rudder_len = 5 * Lm
         # Positive boat.rudder corresponds to a port turn (positive yaw).
         # Draw the rudder deflection so that positive values show up on the
@@ -301,35 +325,6 @@ class CrossingScenarioEnv:
                     (int(round(start[0])), int(round(start[1]))),
                     (int(round(end[0])), int(round(end[1]))),
                     (255, 255, 255),
-                    width=2,
-                    direction="forward",
-                )
-
-            eps = 1e-6
-            rudder_delta = boat.last_rudder_cmd - boat.prev_rudder_cmd
-            if abs(rudder_delta) > eps and length >= 1e-6:
-                # unit vector along the rudder line (from base to tip)
-                ux, uy = dx / length, dy / length
-
-                # normals in screen space
-                left_normal  = (-uy,  ux)
-                right_normal = ( uy, -ux)
-
-                # Positive rudder_delta means "more port" command; draw the arrow
-                # on the port side of the rudder line. Negative means "more starboard".
-                normal = left_normal if rudder_delta > 0 else right_normal
-
-                rc_len = 12.0
-                base_x, base_y = float(rudder_end[0]), float(rudder_end[1])
-                tip_x = base_x + rc_len * normal[0]
-                tip_y = base_y + rc_len * normal[1]
-
-                # Draw arrow starting at the base and pointing outwards
-                self._draw_arrow(
-                    surf,
-                    (int(round(base_x)), int(round(base_y))),
-                    (int(round(tip_x)), int(round(tip_y))),
-                    (235, 200, 120),
                     width=2,
                     direction="forward",
                 )
