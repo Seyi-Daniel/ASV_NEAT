@@ -81,7 +81,11 @@ Invalid overrides raise a friendly error so experiments remain reproducible.
 
 ## Training workflow
 
-1. Install `neat-python` (and `pygame` if rendering is desired).
+1. Install the core dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
 2. Launch training (optionally selecting a specific encounter family):
 
    ```bash
@@ -175,10 +179,10 @@ each scenario, keeping the explanation phase fast and repeatable.
 
 ### Prerequisites
 
-1. Install `lime` alongside the existing training dependencies:
+1. Install the explainer dependencies (included in `requirements.txt`):
 
    ```bash
-   pip install lime
+   pip install -r requirements.txt
    ```
 
 2. Produce a `winner.pkl` via `scripts/train.py --save-winner` or grab the
@@ -256,10 +260,11 @@ stitched animation alongside the environment render frames.
 
 #### Prerequisites
 
-Install `shap` in the same environment used for training/demo:
+Install the SHAP dependencies (included in `requirements.txt`) in the same
+environment used for training/demo:
 
 ```bash
-pip install shap
+pip install -r requirements.txt
 ```
 
 #### Running the explainer
