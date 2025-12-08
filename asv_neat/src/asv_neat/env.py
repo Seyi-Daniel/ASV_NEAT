@@ -41,6 +41,7 @@ class CrossingScenarioEnv:
         self._meta: dict = {}
         self.time = 0.0
         self.step_index = 0
+        self._debug_overlay: Optional[dict] = None
 
         self._screen = None
         self._font = None
@@ -68,6 +69,9 @@ class CrossingScenarioEnv:
         if not self._screen and HAS_PYGAME:
             self.cfg.render = True
             self._setup_render()
+
+    def set_debug_overlay(self, overlay: Optional[dict]) -> None:
+        self._debug_overlay = overlay
 
     def close(self) -> None:
         if self._screen and HAS_PYGAME:
@@ -120,27 +124,44 @@ class CrossingScenarioEnv:
     # ------------------------------------------------------------------
     # Simulation loop
     # ------------------------------------------------------------------
-    def step(self, actions: Optional[Sequence[Optional[tuple[float, int]]]] = None) -> None:
+    def apply_actions(
+        self, actions: Optional[Sequence[Optional[tuple[float, int]]]] = None
+    ) -> None:
         if not self.ships:
             return
 
         if actions is None:
             actions = [None] * len(self.ships)
 
-        dt = float(self.cfg.dt)
-        substeps = max(1, int(self.cfg.substeps))
-        h = dt / substeps
+        for boat in self.ships:
+            boat.begin_step()
 
-        for _ in range(substeps):
-            for boat in self.ships:
-                boat.begin_step()
-            for boat, action in zip(self.ships, actions):
-                if action is not None:
-                    boat.apply_action(action)
+        for boat, action in zip(self.ships, actions):
+            if action is not None:
+                boat.apply_action(action)
+
+    def advance_applied_actions(
+        self, dt: Optional[float] = None, substeps: Optional[int] = None
+    ) -> None:
+        if not self.ships:
+            return
+
+        dt_val = float(self.cfg.dt if dt is None else dt)
+        substeps_val = max(1, int(self.cfg.substeps if substeps is None else substeps))
+        h = dt_val / substeps_val
+
+        for _ in range(substeps_val):
             for boat in self.ships:
                 boat.integrate(h)
             self.time += h
         self.step_index += 1
+
+    def step(self, actions: Optional[Sequence[Optional[tuple[float, int]]]] = None) -> None:
+        if not self.ships:
+            return
+
+        self.apply_actions(actions)
+        self.advance_applied_actions()
 
     # ------------------------------------------------------------------
     # Rendering
@@ -235,8 +256,35 @@ class CrossingScenarioEnv:
 
         stern_x = boat.x - 0.5 * Lm * ch
         stern_y = boat.y - 0.5 * Lm * sh
+
+        # Draw commanded rudder arrow relative to the boat heading.
+        cmd = getattr(boat, "last_rudder_cmd", 0.0)
+        if abs(cmd) > 1e-3:
+            # perpendicular to heading: port is left (positive cmd), starboard is right (negative cmd)
+            perp_x = -math.sin(boat.h)
+            perp_y = math.cos(boat.h)
+            direction_sign = 1.0 if cmd > 0 else -1.0
+            # choose a base arrow length and scale by command magnitude
+            base_len = 12.0  # pixels in world space (can adjust)
+            arrow_len = 3 * base_len * abs(cmd)
+            base_x, base_y = stern_x, stern_y
+            end_x = base_x + direction_sign * arrow_len * perp_x
+            end_y = base_y + direction_sign * arrow_len * perp_y
+            # draw arrow from the stern (screen coordinates)
+            self._draw_arrow(
+                surf,
+                (self.sx(base_x), self.sy(base_y)),
+                (20 + self.sx(end_x), 20 + self.sy(end_y)),
+                (235, 200, 120),
+                width=2,
+                direction="forward",
+            )
+
         rudder_len = 5 * Lm
-        rudder_angle = boat.h + boat.rudder
+        # Positive boat.rudder corresponds to a port turn (positive yaw).
+        # Draw the rudder deflection so that positive values show up on the
+        # "port" side of the wake in the viewer.
+        rudder_angle = boat.h - boat.rudder
         rudder_ch, rudder_sh = math.cos(rudder_angle), math.sin(rudder_angle)
         rudder_start = (self.sx(stern_x), self.sy(stern_y))
         rudder_end = (
@@ -264,6 +312,10 @@ class CrossingScenarioEnv:
                     mid_y + 0.5 * arrow_len * uy,
                 )
 
+                # Draw acceleration arrow along the rudder line (midpoint), pointing
+                # in the direction of motion when accelerating and opposite when
+                # decelerating. This makes it visually obvious when the throttle
+                # is adding or removing speed.
                 if boat.last_thr == 1:  # acceleration
                     start, end = p1, p2
                 else:  # deceleration
@@ -275,32 +327,6 @@ class CrossingScenarioEnv:
                     (255, 255, 255),
                     width=2,
                     direction="forward",
-                )
-
-            eps = 1e-6
-            rudder_delta = boat.last_rudder_cmd - boat.prev_rudder_cmd
-            if abs(rudder_delta) > eps:
-                # unit vector along rudder line (start -> end)
-                # normals to rudder line
-                left_normal  = (-uy,  ux)
-                right_normal = ( uy, -ux)
-
-                normal = left_normal if rudder_delta > 0 else right_normal
-
-                rc_len = 12.0
-
-                # BASE AT THE BOTTOM OF THE RUDDER LINE
-                base_x, base_y = float(rudder_end[0]), float(rudder_end[1])
-                tip_x = base_x + rc_len * normal[0]
-                tip_y = base_y + rc_len * normal[1]
-
-                self._draw_arrow(
-                    surf,
-                    (int(round(tip_x)), int(round(tip_y))),   # base at bottom
-                    (int(round(base_x)),  int(round(base_y))),    # arrow points outward
-                    (235, 200, 120),
-                    width=2,
-                    direction="forward",  # tip at 'end' (tip_x, tip_y)
                 )
         if self._font:
             name = "ASV" if boat.id == 0 else "Target Vessel"
@@ -377,6 +403,15 @@ class CrossingScenarioEnv:
         lines = [
             f"FPS {fps:5.1f}   step {self.step_index}   t {self.time:6.2f}s",
         ]
+
+        if self._debug_overlay:
+            step_info = self._debug_overlay
+            lines.append(
+                "  rudder_cmd_for_arrow "
+                f"{step_info.get('rudder_cmd_for_arrow', 0.0):+5.2f} "
+                f"model_cmd {step_info.get('rudder_cmd_raw', 0.0):+5.2f} "
+                f"step {step_info.get('step', self.step_index)}"
+            )
         scenario_kind = self._meta.get("scenario_kind")
         if scenario_kind:
             lines.append(f"Scenario kind: {scenario_kind}")

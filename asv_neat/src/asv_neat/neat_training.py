@@ -26,6 +26,7 @@ from .utils import (
     euclidean_distance,
     goal_distance,
     heading_error_deg,
+    helm_label_from_rudder_cmd,
     relative_bearing_deg,
     clamp,
     tcpa_dcpa,
@@ -70,9 +71,7 @@ def observation_vector(
     return pack(agent) + pack(stand_on)
 
 
-TraceCallback = Callable[
-    [int, List[float], Sequence[float], float, int, dict, Optional[dict]], None
-]
+TraceCallback = Callable[[dict], None]
 
 
 def simulate_episode(
@@ -110,28 +109,51 @@ def simulate_episode(
 
         features = observation_vector(agent_state, stand_on_state, params)
         outputs = network.activate(features)
-        rudder_cmd = float(outputs[0]) if outputs else 0.0
-        throttle_val = float(outputs[1]) if len(outputs) > 1 else 0.0
-        throttle = clamp(int(round(throttle_val * 2.0)), 0, 2)
+        rudder_cmd_raw = outputs[0] if outputs else 0.0
+        throttle_raw = outputs[1] if len(outputs) > 1 else 0.0
+
+        rudder_cmd = clamp(float(rudder_cmd_raw), -1.0, 1.0)
+        throttle_i = clamp(int(round(float(throttle_raw) * 2.0)), 0, 2)
+
+        helm_label = helm_label_from_rudder_cmd(rudder_cmd)
+        action = (rudder_cmd, throttle_i)
+        actions = [action, None]
 
         if trace_callback is not None:
             trace_callback(
-                step_idx,
-                list(features),
-                list(outputs),
-                rudder_cmd,
-                throttle,
-                dict(agent_state),
-                dict(stand_on_state) if stand_on_state is not None else None,
+                {
+                    "step": step_idx,
+                    "obs": list(features),
+                    "features": list(features),
+                    "outputs": list(outputs),
+                    "action": action,
+                    "rudder_cmd": float(rudder_cmd),
+                    "throttle": int(throttle_i),
+                    "helm_label": helm_label,
+                    "agent_state": dict(agent_state),
+                    "stand_on_state": dict(stand_on_state)
+                    if stand_on_state is not None
+                    else None,
+                }
             )
 
-        env.step([(rudder_cmd, throttle), None])
-        steps = step_idx + 1
-
         if render:
+            env.apply_actions(actions)
+            env.set_debug_overlay(
+                {
+                    "step": step_idx,
+                    "rudder_cmd_for_arrow": float(rudder_cmd),
+                    "rudder_cmd_raw": float(rudder_cmd_raw),
+                }
+            )
             env.render()
             if frame_callback is not None:
                 frame_callback(step_idx, getattr(env, "_screen", None))
+            env.advance_applied_actions()
+            env.set_debug_overlay(None)
+        else:
+            env.step(actions)
+        steps = step_idx + 1
 
         snapshot = env.snapshot()
         if not snapshot:
