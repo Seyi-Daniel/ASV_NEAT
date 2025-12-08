@@ -7,9 +7,8 @@ import json
 import math
 import pickle
 import sys
-from dataclasses import asdict
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import List, Optional
 
 import numpy as np
 
@@ -48,25 +47,7 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from asv_neat import (  # noqa: E402
-    HyperParameters,
-    apply_cli_overrides,
-    build_scenarios,
-    episode_cost,
-    simulate_episode,
-)
-from asv_neat.cli_helpers import (  # noqa: E402
-    SCENARIO_KIND_CHOICES,
-    build_boat_params,
-    build_env_config,
-    build_scenario_request,
-    build_rudder_config,
-    filter_scenarios_by_kind,
-)
-from asv_neat.config import BoatParams, EnvConfig, RudderParams  # noqa: E402
-from asv_neat.env import CrossingScenarioEnv  # noqa: E402
-from asv_neat.neat_training import TraceCallback  # noqa: E402
-from asv_neat.scenario import EncounterScenario  # noqa: E402
+from asv_neat.cli_helpers import SCENARIO_KIND_CHOICES  # noqa: E402
 from asv_neat.paths import default_winner_path  # noqa: E402
 from asv_neat.utils import helm_label_from_rudder_cmd  # noqa: E402
 
@@ -141,17 +122,7 @@ class LimeThrottleWrapper:
             throttle_val = float(outputs[1]) if outputs.ndim > 0 and outputs.size > 1 else 0.0
             predictions.append(_throttle_distribution(throttle_val))
         return np.asarray(predictions, dtype=float)
-
-
-def _serialise_vessel(state) -> dict:
-    data = asdict(state)
-    goal = data.get("goal")
-    if goal is not None:
-        data["goal"] = list(goal)
-    return data
-
-
-def _build_parser(hparams: HyperParameters) -> argparse.ArgumentParser:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config",
@@ -172,51 +143,29 @@ def _build_parser(hparams: HyperParameters) -> argparse.ArgumentParser:
         help="Select which encounter family should be explained.",
     )
     parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=PROJECT_ROOT / "captured_episodes",
+        help="Directory containing pre-captured traces and frames.",
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=PROJECT_ROOT / "lime_reports",
         help="Directory where explanation artefacts will be written.",
     )
-    parser.add_argument(
-        "--hp",
-        action="append",
-        default=[],
-        metavar="NAME=VALUE",
-        help="Override a hyperparameter (repeatable).",
-    )
     return parser
-
-
-def _trace_recorder(container: List[dict]) -> TraceCallback:
-    def _record(payload: dict) -> None:
-        if "features" not in payload and "obs" in payload:
-            payload = {**payload, "features": list(payload["obs"])}
-        container.append(payload)
-
-    return _record
-
-
-def _scenario_metadata(
-    scenario: EncounterScenario,
-    metrics,
-    cost: float,
-) -> dict:
-    metadata = {
-        "scenario_kind": scenario.kind.value,
-        "requested_bearing_deg": scenario.requested_bearing,
-        "bearing_frame": scenario.bearing_frame,
-        "agent": _serialise_vessel(scenario.agent),
-        "stand_on": _serialise_vessel(scenario.stand_on),
-        "metrics": asdict(metrics),
-        "episode_cost": cost,
-    }
-    return metadata
 
 
 def _write_json(path: Path, payload: dict | list) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2)
+
+
+def _load_json(path: Path) -> dict | list:
+    with path.open("r", encoding="utf-8") as fh:
+        return json.load(fh)
 
 
 def _save_frame(path: Path, surface) -> None:
@@ -402,15 +351,32 @@ def _load_winner(path: Path):
         return pickle.load(fh)
 
 
+def _iter_scenario_dirs(data_dir: Path, scenario_kind: str) -> List[Path]:
+    if not data_dir.exists():
+        raise FileNotFoundError(f"Data directory '{data_dir}' does not exist.")
+    scenario_dirs: List[Path] = []
+    for path in sorted(p for p in data_dir.iterdir() if p.is_dir()):
+        metadata_path = path / "metadata.json"
+        trace_path = path / "trace.json"
+        if not metadata_path.exists() or not trace_path.exists():
+            continue
+        metadata = _load_json(metadata_path)
+        if scenario_kind != "all" and metadata.get("scenario_kind") != scenario_kind:
+            continue
+        scenario_dirs.append(path)
+    if not scenario_dirs:
+        raise RuntimeError(
+            f"No scenarios found in {data_dir} for kind '{scenario_kind}'."
+        )
+    return scenario_dirs
+
+
 def explain_scenarios(
     *,
     winner_path: Path,
     config_path: Path,
-    scenarios: Iterable[EncounterScenario],
-    hparams: HyperParameters,
-    boat_params: BoatParams,
-    rudder_cfg: RudderParams,
-    env_cfg: EnvConfig,
+    data_dir: Path,
+    scenario_kind: str,
     output_dir: Path,
 ) -> None:
     winner = _load_winner(winner_path)
@@ -423,35 +389,21 @@ def explain_scenarios(
     )
     network = neat.nn.FeedForwardNetwork.create(winner, neat_config)
 
-    for idx, scenario in enumerate(scenarios, start=1):
-        scenario_dir = output_dir / f"{idx:02d}_{scenario.kind.value}"
+    for idx, scenario_path in enumerate(
+        _iter_scenario_dirs(data_dir, scenario_kind), start=1
+    ):
+        metadata = _load_json(scenario_path / "metadata.json")
+        trace = _load_json(scenario_path / "trace.json")
+
+        scenario_dir = output_dir / scenario_path.name
         scenario_dir.mkdir(parents=True, exist_ok=True)
-        frame_dir = scenario_dir / FRAME_DIRNAME
+        frame_dir = scenario_path / FRAME_DIRNAME
         plot_dir = scenario_dir / PLOT_DIRNAME
         combined_dir = scenario_dir / COMBINED_DIRNAME
-        env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, rudder_cfg=rudder_cfg)
-        trace: List[dict] = []
-        try:
-            recorder = _trace_recorder(trace)
 
-            def frame_recorder(step: int, surf) -> None:
-                _save_frame(frame_dir / f"frame_{step:03d}.png", surf)
-
-            metrics = simulate_episode(
-                env,
-                scenario,
-                network,
-                hparams,
-                render=True,
-                trace_callback=recorder,
-                frame_callback=frame_recorder,
-            )
-        finally:
-            env.close()
-        cost = episode_cost(metrics, hparams)
-        metadata = _scenario_metadata(scenario, metrics, cost)
         _write_json(scenario_dir / "metadata.json", metadata)
         _write_json(scenario_dir / "trace.json", trace)
+
         explanations = _generate_lime(scenario_dir, trace, network)
         _plot_explanations(explanations, plot_dir)
         combined_rudder_frames = _combine_frames(
@@ -464,28 +416,18 @@ def explain_scenarios(
         _write_animation(
             combined_throttle_frames, scenario_dir / THROTTLE_ANIMATION_FILENAME
         )
+        steps = metadata.get("metrics", {}).get("steps", 0)
+        cost = metadata.get("episode_cost", 0.0)
+        kind = metadata.get("scenario_kind", "unknown")
         print(
-            f"Scenario {idx:02d} [{scenario.kind.value}] steps={metrics.steps:4d} "
+            f"Scenario {idx:02d} [{kind}] steps={steps:4d} "
             f"cost={cost:7.2f} outputs saved to {scenario_dir}"
         )
 
 
 def main(argv: Optional[list[str]] = None) -> None:
-    hparams = HyperParameters()
-    parser = _build_parser(hparams)
+    parser = _build_parser()
     args = parser.parse_args(argv)
-
-    try:
-        apply_cli_overrides(hparams, args.hp)
-    except (KeyError, ValueError) as exc:
-        parser.error(str(exc))
-
-    scenario_request = build_scenario_request(hparams)
-    scenarios = filter_scenarios_by_kind(
-        build_scenarios(scenario_request), args.scenario_kind
-    )
-    if not scenarios:
-        parser.error("No scenarios available for the requested encounter kind.")
 
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -496,18 +438,11 @@ def main(argv: Optional[list[str]] = None) -> None:
     if not winner_path.exists():
         parser.error(f"Winner file '{winner_path}' does not exist.")
 
-    boat_params = build_boat_params(hparams)
-    rudder_cfg = build_rudder_config(hparams)
-    env_cfg = build_env_config(hparams, render=True)
-
     explain_scenarios(
         winner_path=winner_path,
         config_path=args.config,
-        scenarios=scenarios,
-        hparams=hparams,
-        boat_params=boat_params,
-        rudder_cfg=rudder_cfg,
-        env_cfg=env_cfg,
+        data_dir=args.data_dir,
+        scenario_kind=args.scenario_kind,
         output_dir=output_dir,
     )
 
