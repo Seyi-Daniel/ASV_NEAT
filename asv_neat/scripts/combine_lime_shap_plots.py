@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Combine LIME and SHAP plot images into 2x2 grids and an animated GIF."""
+"""Combine LIME and SHAP plot images into 2x2 grids across scenarios."""
 from __future__ import annotations
 
 import argparse
@@ -7,28 +7,32 @@ import re
 from pathlib import Path
 from typing import List, Sequence
 
-import imageio.v2 as imageio
 from PIL import Image
 
 RUDDER_PLOT_PATTERN = re.compile(r"explanation_rudder_(\d+)\.png")
 THROTTLE_PLOT_PATTERN = re.compile(r"explanation_throttle_(\d+)\.png")
 
 
-def _find_matching_dir(base: Path, patterns: Sequence[re.Pattern[str]]) -> Path:
-    """Return the first directory under ``base`` containing files for all patterns."""
+def _find_matching_dirs(base: Path, patterns: Sequence[re.Pattern[str]]) -> dict[str, Path]:
+    """Return mapping of relative scenario names to directories containing all patterns."""
 
+    scenario_dirs: dict[str, Path] = {}
     search_dirs: List[Path] = [base]
-    search_dirs.extend([child for child in base.iterdir() if child.is_dir()])
+    search_dirs.extend(child for child in base.rglob("*") if child.is_dir())
 
     for candidate in search_dirs:
-        if all(any(pattern.fullmatch(item.name) for item in candidate.iterdir() if item.is_file()) for pattern in patterns):
-            return candidate
-    pattern_descriptions = ", ".join(p.pattern for p in patterns)
-    raise FileNotFoundError(f"Could not find directory under {base} with files matching: {pattern_descriptions}")
+        if all(
+            any(pattern.fullmatch(item.name) for item in candidate.iterdir() if item.is_file())
+            for pattern in patterns
+        ):
+            scenario_key = candidate.relative_to(base).as_posix() or "root"
+            scenario_dirs[scenario_key] = candidate
+
+    return scenario_dirs
 
 
-def _discover_plot_dir(base: Path) -> Path:
-    return _find_matching_dir(base, [RUDDER_PLOT_PATTERN, THROTTLE_PLOT_PATTERN])
+def _discover_plot_dirs(base: Path) -> dict[str, Path]:
+    return _find_matching_dirs(base, [RUDDER_PLOT_PATTERN, THROTTLE_PLOT_PATTERN])
 
 
 def _extract_plot_steps(plot_dir: Path) -> List[int]:
@@ -99,10 +103,9 @@ def _compose_plot_grid(
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--lime-dir", type=Path, required=True, help="Path to LIME scenario output directory")
-    parser.add_argument("--shap-dir", type=Path, required=True, help="Path to SHAP scenario output directory")
+    parser.add_argument("--lime-dir", type=Path, required=True, help="Path to root LIME reports directory")
+    parser.add_argument("--shap-dir", type=Path, required=True, help="Path to root SHAP reports directory")
     parser.add_argument("--output-dir", type=Path, required=True, help="Directory for combined plot outputs")
-    parser.add_argument("--fps", type=int, default=8, help="Frames per second for the final plot GIF")
     return parser
 
 
@@ -112,56 +115,65 @@ def main() -> None:
     lime_dir: Path = args.lime_dir
     shap_dir: Path = args.shap_dir
     output_dir: Path = args.output_dir
-    fps: int = args.fps
 
-    lime_plot_dir = _discover_plot_dir(lime_dir)
-    shap_plot_dir = _discover_plot_dir(shap_dir)
+    lime_plot_dirs = _discover_plot_dirs(lime_dir)
+    shap_plot_dirs = _discover_plot_dirs(shap_dir)
 
-    lime_steps = _extract_plot_steps(lime_plot_dir)
-    shap_steps = _extract_plot_steps(shap_plot_dir)
-    candidate_steps = sorted(set(lime_steps) | set(shap_steps))
+    shared_keys = sorted(set(lime_plot_dirs) & set(shap_plot_dirs))
 
-    if not candidate_steps:
-        raise RuntimeError("No LIME/SHAP plot images found in the provided directories.")
+    if not shared_keys:
+        raise RuntimeError("No matching scenarios with LIME and SHAP plot images were found.")
 
-    combined_plot_dir = output_dir / "combined_plots"
-    combined_plot_dir.mkdir(parents=True, exist_ok=True)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    total_generated = 0
+    for scenario_key in shared_keys:
+        lime_plot_dir = lime_plot_dirs[scenario_key]
+        shap_plot_dir = shap_plot_dirs[scenario_key]
 
-    combined_plots: List[Path] = []
+        lime_steps = _extract_plot_steps(lime_plot_dir)
+        shap_steps = _extract_plot_steps(shap_plot_dir)
+        candidate_steps = sorted(set(lime_steps) | set(shap_steps))
 
-    for step in candidate_steps:
-        rudder_name = f"explanation_rudder_{step:03d}.png"
-        throttle_name = f"explanation_throttle_{step:03d}.png"
-
-        lime_rudder_path = lime_plot_dir / rudder_name
-        lime_throttle_path = lime_plot_dir / throttle_name
-        shap_rudder_path = shap_plot_dir / rudder_name
-        shap_throttle_path = shap_plot_dir / throttle_name
-
-        plot_required_paths = [lime_rudder_path, lime_throttle_path, shap_rudder_path, shap_throttle_path]
-        if not all(path.exists() for path in plot_required_paths):
+        if not candidate_steps:
             continue
 
-        plot_grid = _compose_plot_grid(
-            lime_rudder_path,
-            lime_throttle_path,
-            shap_rudder_path,
-            shap_throttle_path,
-        )
-        plot_output_path = combined_plot_dir / f"plots_{step:03d}.png"
-        plot_grid.save(plot_output_path)
-        combined_plots.append(plot_output_path)
+        scenario_output_dir = output_dir / scenario_key
+        combined_plot_dir = scenario_output_dir / "combined_plots"
+        combined_plot_dir.mkdir(parents=True, exist_ok=True)
+        scenario_output_dir.mkdir(parents=True, exist_ok=True)
 
-    if not combined_plots:
+        generated_for_scenario = 0
+        for step in candidate_steps:
+            rudder_name = f"explanation_rudder_{step:03d}.png"
+            throttle_name = f"explanation_throttle_{step:03d}.png"
+
+            lime_rudder_path = lime_plot_dir / rudder_name
+            lime_throttle_path = lime_plot_dir / throttle_name
+            shap_rudder_path = shap_plot_dir / rudder_name
+            shap_throttle_path = shap_plot_dir / throttle_name
+
+            plot_required_paths = [lime_rudder_path, lime_throttle_path, shap_rudder_path, shap_throttle_path]
+            if not all(path.exists() for path in plot_required_paths):
+                continue
+
+            plot_grid = _compose_plot_grid(
+                lime_rudder_path,
+                lime_throttle_path,
+                shap_rudder_path,
+                shap_throttle_path,
+            )
+            plot_output_path = combined_plot_dir / f"plots_{step:03d}.png"
+            plot_grid.save(plot_output_path)
+            generated_for_scenario += 1
+
+        if generated_for_scenario:
+            total_generated += generated_for_scenario
+            print(
+                f"Saved {generated_for_scenario} plot grids to {combined_plot_dir} "
+                f"for scenario '{scenario_key}'"
+            )
+
+    if not total_generated:
         raise RuntimeError("No plot grids were generated; ensure required plots exist for matching steps.")
-
-    plot_images = [imageio.imread(plot_path) for plot_path in combined_plots]
-    plot_gif_path = output_dir / "lime_shap_plots_animation.gif"
-    imageio.mimsave(plot_gif_path, plot_images, fps=fps)
-
-    print(f"Saved {len(combined_plots)} plot grids to {combined_plot_dir}")
-    print(f"Saved plot GIF to {plot_gif_path}")
 
 
 if __name__ == "__main__":
