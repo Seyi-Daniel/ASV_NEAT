@@ -153,6 +153,17 @@ def _compose_frame(
     return canvas
 
 
+def _pad_canvas(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
+    if image.width == target_width and image.height == target_height:
+        return image
+
+    padded = Image.new("RGB", (target_width, target_height), color=(255, 255, 255))
+    offset_x = (target_width - image.width) // 2 if target_width > image.width else 0
+    offset_y = (target_height - image.height) // 2 if target_height > image.height else 0
+    padded.paste(image, (offset_x, offset_y))
+    return padded
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lime-dir", type=Path, required=True, help="Path to LIME scenario output directory")
@@ -201,7 +212,9 @@ def main() -> None:
     combined_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    combined_frames: List[Path] = []
+    composites: List[tuple[int, Image.Image]] = []
+    max_width = 0
+    max_height = 0
 
     for step in steps:
         scene_path = lime_frames.get(step) or shap_frames.get(step)
@@ -227,12 +240,19 @@ def main() -> None:
             shap_rudder_path,
             shap_throttle_path,
         )
-        output_path = combined_dir / f"combined_{step:03d}.png"
-        composite.save(output_path)
-        combined_frames.append(output_path)
+        max_width = max(max_width, composite.width)
+        max_height = max(max_height, composite.height)
+        composites.append((step, composite))
 
-    if not combined_frames:
+    if not composites:
         raise RuntimeError("No combined frames were generated; ensure required frames and plots exist.")
+
+    combined_frames: List[Path] = []
+    for step, composite in composites:
+        padded = _pad_canvas(composite, max_width, max_height)
+        output_path = combined_dir / f"combined_{step:03d}.png"
+        padded.save(output_path)
+        combined_frames.append(output_path)
 
     images = [imageio.imread(frame_path) for frame_path in combined_frames]
     gif_path = output_dir / "lime_shap_explanation_animation.gif"
