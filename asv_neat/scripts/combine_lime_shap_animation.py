@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import List, Sequence
 
 import imageio.v2 as imageio
 from PIL import Image
@@ -28,15 +28,20 @@ def _find_matching_dir(base: Path, patterns: Sequence[re.Pattern[str]]) -> Path:
     raise FileNotFoundError(f"Could not find directory under {base} with files matching: {pattern_descriptions}")
 
 
-def _discover_frame_dir(base: Path) -> Path:
-    return _find_matching_dir(base, [FRAME_FILENAME_PATTERN])
+def _discover_frame_dir(base: Path) -> Path | None:
+    try:
+        return _find_matching_dir(base, [FRAME_FILENAME_PATTERN])
+    except FileNotFoundError:
+        return None
 
 
 def _discover_plot_dir(base: Path) -> Path:
     return _find_matching_dir(base, [RUDDER_PLOT_PATTERN, THROTTLE_PLOT_PATTERN])
 
 
-def _extract_steps(frame_dir: Path) -> List[int]:
+def _extract_steps(frame_dir: Path | None) -> List[int]:
+    if frame_dir is None:
+        return []
     steps = []
     for frame_path in frame_dir.iterdir():
         if not frame_path.is_file():
@@ -131,11 +136,9 @@ def main() -> None:
     shap_frame_dir = _discover_frame_dir(shap_dir)
     shap_plot_dir = _discover_plot_dir(shap_dir)
 
-    steps = _extract_steps(lime_frame_dir)
+    steps = _extract_steps(lime_frame_dir) or _extract_steps(shap_frame_dir)
     if not steps:
-        steps = _extract_steps(shap_frame_dir)
-    if not steps:
-        raise RuntimeError("No frame images found in either LIME or SHAP directories.")
+        raise RuntimeError("No frame images found in the provided directories.")
 
     combined_dir = output_dir / "combined_frames"
     combined_dir.mkdir(parents=True, exist_ok=True)
@@ -148,23 +151,24 @@ def main() -> None:
         rudder_name = f"explanation_rudder_{step:03d}.png"
         throttle_name = f"explanation_throttle_{step:03d}.png"
 
-        scene_path = lime_frame_dir / frame_name
-        if not scene_path.exists():
-            scene_path = shap_frame_dir / frame_name
+        scene_path = lime_frame_dir / frame_name if lime_frame_dir else None
+        if scene_path is None or not scene_path.exists():
+            scene_path = shap_frame_dir / frame_name if shap_frame_dir else None
         lime_rudder_path = lime_plot_dir / rudder_name
         lime_throttle_path = lime_plot_dir / throttle_name
         shap_rudder_path = shap_plot_dir / rudder_name
         shap_throttle_path = shap_plot_dir / throttle_name
 
-        required_paths = [
-            scene_path,
+        plot_required_paths = [
             lime_rudder_path,
             lime_throttle_path,
             shap_rudder_path,
             shap_throttle_path,
         ]
 
-        if not all(path.exists() for path in required_paths):
+        if scene_path is None or not scene_path.exists():
+            continue
+        if not all(path.exists() for path in plot_required_paths):
             continue
 
         composite = _compose_frame(
@@ -179,7 +183,7 @@ def main() -> None:
         combined_frames.append(output_path)
 
     if not combined_frames:
-        raise RuntimeError("No composite frames were generated; ensure required images exist.")
+        raise RuntimeError("No combined frames were generated; ensure required frames and plots exist.")
 
     images = [imageio.imread(frame_path) for frame_path in combined_frames]
     gif_path = output_dir / "lime_shap_explanation_animation.gif"
