@@ -11,6 +11,10 @@ import imageio.v2 as imageio
 from PIL import Image
 
 FRAME_FILENAME_PATTERN = re.compile(r"frame[_-]?(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE)
+COMBINED_RUDDER_PATTERN = re.compile(r"combined_rudder[_-]?(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE)
+COMBINED_THROTTLE_PATTERN = re.compile(
+    r"combined_throttle[_-]?(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE
+)
 RUDDER_PLOT_PATTERN = re.compile(r"explanation_rudder_(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE)
 THROTTLE_PLOT_PATTERN = re.compile(r"explanation_throttle_(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE)
 def _index_files(base: Path, pattern: re.Pattern[str]) -> Dict[int, Path]:
@@ -24,6 +28,31 @@ def _index_files(base: Path, pattern: re.Pattern[str]) -> Dict[int, Path]:
         step = int(match.group(1))
         matches.setdefault(step, candidate)
     return matches
+
+
+def _index_scene_frames(base: Path) -> Dict[int, Path]:
+    """Index potential scene frames, preferring raw frames over combined overlays."""
+
+    matches: Dict[int, tuple[int, Path]] = {}
+    patterns: list[tuple[int, re.Pattern[str]]] = [
+        (0, FRAME_FILENAME_PATTERN),
+        (1, COMBINED_RUDDER_PATTERN),
+        (2, COMBINED_THROTTLE_PATTERN),
+    ]
+
+    for candidate in base.rglob("*"):
+        if not candidate.is_file():
+            continue
+        for priority, pattern in patterns:
+            match = pattern.fullmatch(candidate.name)
+            if not match:
+                continue
+            step = int(match.group(1))
+            if step not in matches or priority < matches[step][0]:
+                matches[step] = (priority, candidate)
+            break
+
+    return {step: path for step, (_, path) in matches.items()}
 
 
 def _resize_plot_to_height(path: Path, target_height: int) -> Image.Image:
@@ -105,8 +134,8 @@ def main() -> None:
     output_dir: Path = args.output_dir
     fps: int = args.fps
 
-    lime_frames = _index_files(lime_dir, FRAME_FILENAME_PATTERN)
-    shap_frames = _index_files(shap_dir, FRAME_FILENAME_PATTERN)
+    lime_frames = _index_scene_frames(lime_dir)
+    shap_frames = _index_scene_frames(shap_dir)
     lime_rudder_plots = _index_files(lime_dir, RUDDER_PLOT_PATTERN)
     lime_throttle_plots = _index_files(lime_dir, THROTTLE_PLOT_PATTERN)
     shap_rudder_plots = _index_files(shap_dir, RUDDER_PLOT_PATTERN)
