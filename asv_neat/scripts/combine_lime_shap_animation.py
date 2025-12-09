@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import List, Sequence
 
 import imageio.v2 as imageio
 from PIL import Image
@@ -47,21 +47,6 @@ def _extract_steps(frame_dir: Path | None) -> List[int]:
         if not frame_path.is_file():
             continue
         match = FRAME_FILENAME_PATTERN.fullmatch(frame_path.name)
-        if match:
-            steps.append(int(match.group(1)))
-    return sorted(set(steps))
-
-
-def _extract_plot_steps(plot_dir: Path | None) -> List[int]:
-    if plot_dir is None:
-        return []
-    steps = []
-    for plot_path in plot_dir.iterdir():
-        if not plot_path.is_file():
-            continue
-        match = RUDDER_PLOT_PATTERN.fullmatch(plot_path.name) or THROTTLE_PLOT_PATTERN.fullmatch(
-            plot_path.name
-        )
         if match:
             steps.append(int(match.group(1)))
     return sorted(set(steps))
@@ -129,45 +114,6 @@ def _compose_frame(
     return canvas
 
 
-def _compose_plot_grid(
-    lime_rudder_path: Path,
-    lime_throttle_path: Path,
-    shap_rudder_path: Path,
-    shap_throttle_path: Path,
-) -> Image.Image:
-    lime_rudder = Image.open(lime_rudder_path).convert("RGB")
-    lime_throttle = Image.open(lime_throttle_path).convert("RGB")
-    shap_rudder = Image.open(shap_rudder_path).convert("RGB")
-    shap_throttle = Image.open(shap_throttle_path).convert("RGB")
-
-    top_height = max(lime_rudder.height, shap_rudder.height)
-    bottom_height = max(lime_throttle.height, shap_throttle.height)
-
-    lime_rudder = _resize_plot_to_height(lime_rudder_path, top_height)
-    shap_rudder = _resize_plot_to_height(shap_rudder_path, top_height)
-    lime_throttle = _resize_plot_to_height(lime_throttle_path, bottom_height)
-    shap_throttle = _resize_plot_to_height(shap_throttle_path, bottom_height)
-
-    left_width = max(lime_rudder.width, lime_throttle.width)
-    right_width = max(shap_rudder.width, shap_throttle.width)
-
-    lime_rudder = _pad_plot_width(lime_rudder, left_width)
-    lime_throttle = _pad_plot_width(lime_throttle, left_width)
-    shap_rudder = _pad_plot_width(shap_rudder, right_width)
-    shap_throttle = _pad_plot_width(shap_throttle, right_width)
-
-    grid_width = left_width + right_width
-    grid_height = top_height + bottom_height
-    canvas = Image.new("RGB", (grid_width, grid_height), color=(255, 255, 255))
-
-    canvas.paste(lime_rudder, (0, 0))
-    canvas.paste(shap_rudder, (left_width, 0))
-    canvas.paste(lime_throttle, (0, top_height))
-    canvas.paste(shap_throttle, (left_width, top_height))
-
-    return canvas
-
-
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lime-dir", type=Path, required=True, help="Path to LIME scenario output directory")
@@ -190,21 +136,15 @@ def main() -> None:
     shap_frame_dir = _discover_frame_dir(shap_dir)
     shap_plot_dir = _discover_plot_dir(shap_dir)
 
-    steps = _extract_steps(lime_frame_dir)
-    steps = steps or _extract_steps(shap_frame_dir)
-    steps = steps or _extract_plot_steps(lime_plot_dir)
-    steps = steps or _extract_plot_steps(shap_plot_dir)
+    steps = _extract_steps(lime_frame_dir) or _extract_steps(shap_frame_dir)
     if not steps:
-        raise RuntimeError("No frame or plot images found in the provided directories.")
+        raise RuntimeError("No frame images found in the provided directories.")
 
     combined_dir = output_dir / "combined_frames"
-    combined_plot_dir = output_dir / "combined_plots"
     combined_dir.mkdir(parents=True, exist_ok=True)
-    combined_plot_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     combined_frames: List[Path] = []
-    combined_plots: List[Path] = []
 
     for step in steps:
         frame_name = f"frame_{step:03d}.png"
@@ -226,49 +166,31 @@ def main() -> None:
             shap_throttle_path,
         ]
 
+        if scene_path is None or not scene_path.exists():
+            continue
         if not all(path.exists() for path in plot_required_paths):
             continue
 
-        if scene_path is not None and scene_path.exists():
-            composite = _compose_frame(
-                scene_path,
-                lime_rudder_path,
-                lime_throttle_path,
-                shap_rudder_path,
-                shap_throttle_path,
-            )
-            output_path = combined_dir / f"combined_{step:03d}.png"
-            composite.save(output_path)
-            combined_frames.append(output_path)
-
-        plot_grid = _compose_plot_grid(
+        composite = _compose_frame(
+            scene_path,
             lime_rudder_path,
             lime_throttle_path,
             shap_rudder_path,
             shap_throttle_path,
         )
-        plot_output_path = combined_plot_dir / f"plots_{step:03d}.png"
-        plot_grid.save(plot_output_path)
-        combined_plots.append(plot_output_path)
+        output_path = combined_dir / f"combined_{step:03d}.png"
+        composite.save(output_path)
+        combined_frames.append(output_path)
 
-    if not combined_plots:
-        raise RuntimeError("No plot grids were generated; ensure required plots exist.")
-    if combined_frames:
-        images = [imageio.imread(frame_path) for frame_path in combined_frames]
-        gif_path = output_dir / "lime_shap_explanation_animation.gif"
-        imageio.mimsave(gif_path, images, fps=fps)
+    if not combined_frames:
+        raise RuntimeError("No combined frames were generated; ensure required frames and plots exist.")
 
-    plot_images = [imageio.imread(plot_path) for plot_path in combined_plots]
-    plot_gif_path = output_dir / "lime_shap_plots_animation.gif"
-    imageio.mimsave(plot_gif_path, plot_images, fps=fps)
+    images = [imageio.imread(frame_path) for frame_path in combined_frames]
+    gif_path = output_dir / "lime_shap_explanation_animation.gif"
+    imageio.mimsave(gif_path, images, fps=fps)
 
-    if combined_frames:
-        print(f"Saved {len(combined_frames)} frames to {combined_dir}")
-        print(f"Saved GIF to {gif_path}")
-    else:
-        print("No scene frames found; skipping combined frame images and GIF generation.")
-    print(f"Saved {len(combined_plots)} plot grids to {combined_plot_dir}")
-    print(f"Saved plot GIF to {plot_gif_path}")
+    print(f"Saved {len(combined_frames)} frames to {combined_dir}")
+    print(f"Saved GIF to {gif_path}")
 
 
 if __name__ == "__main__":
