@@ -28,20 +28,40 @@ def _find_matching_dir(base: Path, patterns: Sequence[re.Pattern[str]]) -> Path:
     raise FileNotFoundError(f"Could not find directory under {base} with files matching: {pattern_descriptions}")
 
 
-def _discover_frame_dir(base: Path) -> Path:
-    return _find_matching_dir(base, [FRAME_FILENAME_PATTERN])
+def _discover_frame_dir(base: Path) -> Path | None:
+    try:
+        return _find_matching_dir(base, [FRAME_FILENAME_PATTERN])
+    except FileNotFoundError:
+        return None
 
 
 def _discover_plot_dir(base: Path) -> Path:
     return _find_matching_dir(base, [RUDDER_PLOT_PATTERN, THROTTLE_PLOT_PATTERN])
 
 
-def _extract_steps(frame_dir: Path) -> List[int]:
+def _extract_steps(frame_dir: Path | None) -> List[int]:
+    if frame_dir is None:
+        return []
     steps = []
     for frame_path in frame_dir.iterdir():
         if not frame_path.is_file():
             continue
         match = FRAME_FILENAME_PATTERN.fullmatch(frame_path.name)
+        if match:
+            steps.append(int(match.group(1)))
+    return sorted(set(steps))
+
+
+def _extract_plot_steps(plot_dir: Path | None) -> List[int]:
+    if plot_dir is None:
+        return []
+    steps = []
+    for plot_path in plot_dir.iterdir():
+        if not plot_path.is_file():
+            continue
+        match = RUDDER_PLOT_PATTERN.fullmatch(plot_path.name) or THROTTLE_PLOT_PATTERN.fullmatch(
+            plot_path.name
+        )
         if match:
             steps.append(int(match.group(1)))
     return sorted(set(steps))
@@ -171,10 +191,11 @@ def main() -> None:
     shap_plot_dir = _discover_plot_dir(shap_dir)
 
     steps = _extract_steps(lime_frame_dir)
+    steps = steps or _extract_steps(shap_frame_dir)
+    steps = steps or _extract_plot_steps(lime_plot_dir)
+    steps = steps or _extract_plot_steps(shap_plot_dir)
     if not steps:
-        steps = _extract_steps(shap_frame_dir)
-    if not steps:
-        raise RuntimeError("No frame images found in either LIME or SHAP directories.")
+        raise RuntimeError("No frame or plot images found in the provided directories.")
 
     combined_dir = output_dir / "combined_frames"
     combined_plot_dir = output_dir / "combined_plots"
@@ -190,35 +211,35 @@ def main() -> None:
         rudder_name = f"explanation_rudder_{step:03d}.png"
         throttle_name = f"explanation_throttle_{step:03d}.png"
 
-        scene_path = lime_frame_dir / frame_name
-        if not scene_path.exists():
-            scene_path = shap_frame_dir / frame_name
+        scene_path = lime_frame_dir / frame_name if lime_frame_dir else None
+        if scene_path is None or not scene_path.exists():
+            scene_path = shap_frame_dir / frame_name if shap_frame_dir else None
         lime_rudder_path = lime_plot_dir / rudder_name
         lime_throttle_path = lime_plot_dir / throttle_name
         shap_rudder_path = shap_plot_dir / rudder_name
         shap_throttle_path = shap_plot_dir / throttle_name
 
-        required_paths = [
-            scene_path,
+        plot_required_paths = [
             lime_rudder_path,
             lime_throttle_path,
             shap_rudder_path,
             shap_throttle_path,
         ]
 
-        if not all(path.exists() for path in required_paths):
+        if not all(path.exists() for path in plot_required_paths):
             continue
 
-        composite = _compose_frame(
-            scene_path,
-            lime_rudder_path,
-            lime_throttle_path,
-            shap_rudder_path,
-            shap_throttle_path,
-        )
-        output_path = combined_dir / f"combined_{step:03d}.png"
-        composite.save(output_path)
-        combined_frames.append(output_path)
+        if scene_path is not None and scene_path.exists():
+            composite = _compose_frame(
+                scene_path,
+                lime_rudder_path,
+                lime_throttle_path,
+                shap_rudder_path,
+                shap_throttle_path,
+            )
+            output_path = combined_dir / f"combined_{step:03d}.png"
+            composite.save(output_path)
+            combined_frames.append(output_path)
 
         plot_grid = _compose_plot_grid(
             lime_rudder_path,
@@ -230,21 +251,22 @@ def main() -> None:
         plot_grid.save(plot_output_path)
         combined_plots.append(plot_output_path)
 
-    if not combined_frames:
-        raise RuntimeError("No composite frames were generated; ensure required images exist.")
     if not combined_plots:
         raise RuntimeError("No plot grids were generated; ensure required plots exist.")
-
-    images = [imageio.imread(frame_path) for frame_path in combined_frames]
-    gif_path = output_dir / "lime_shap_explanation_animation.gif"
-    imageio.mimsave(gif_path, images, fps=fps)
+    if combined_frames:
+        images = [imageio.imread(frame_path) for frame_path in combined_frames]
+        gif_path = output_dir / "lime_shap_explanation_animation.gif"
+        imageio.mimsave(gif_path, images, fps=fps)
 
     plot_images = [imageio.imread(plot_path) for plot_path in combined_plots]
     plot_gif_path = output_dir / "lime_shap_plots_animation.gif"
     imageio.mimsave(plot_gif_path, plot_images, fps=fps)
 
-    print(f"Saved {len(combined_frames)} frames to {combined_dir}")
-    print(f"Saved GIF to {gif_path}")
+    if combined_frames:
+        print(f"Saved {len(combined_frames)} frames to {combined_dir}")
+        print(f"Saved GIF to {gif_path}")
+    else:
+        print("No scene frames found; skipping combined frame images and GIF generation.")
     print(f"Saved {len(combined_plots)} plot grids to {combined_plot_dir}")
     print(f"Saved plot GIF to {plot_gif_path}")
 
