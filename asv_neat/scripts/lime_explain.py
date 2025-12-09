@@ -74,6 +74,19 @@ THROTTLE_ANIMATION_FILENAME = "explanation_throttle_animation.gif"
 
 
 THROTTLE_LABELS: List[str] = ["hold speed", "accelerate", "decelerate"]
+KERNEL_WIDTHS: List[float] = [0.5, 1.0, 2.0]
+
+
+def _adjust_color_intensity(color: tuple[float, ...], intensity: float) -> tuple[float, float, float, float]:
+    """Lighten or darken an RGBA color by the given intensity factor."""
+
+    red, green, blue, alpha = (color + (1.0,))[:4]
+    return (
+        max(0.0, min(1.0, red * intensity)),
+        max(0.0, min(1.0, green * intensity)),
+        max(0.0, min(1.0, blue * intensity)),
+        alpha,
+    )
 
 
 def _format_rudder_angle(angle_rad: float) -> str:
@@ -176,17 +189,44 @@ def _save_frame(path: Path, surface) -> None:
 
 
 def _plot_explanation(step_data: dict, output_path: Path, *, title: str) -> None:
-    weights = {item["feature"]: item["weight"] for item in step_data["feature_attributions"]}
-    values = [weights.get(name, 0.0) for name in FEATURE_NAMES]
-    colors = ["#3CB371" if weight >= 0 else "#D95F02" for weight in values]
+    attr_sets = step_data.get("feature_attributions", [])
+    if not attr_sets:
+        return
 
-    fig, ax = plt.subplots(figsize=(12, 7))
-    ax.barh(FEATURE_NAMES, values, color=colors)
-    ax.axvline(0.0, color="#333333", linewidth=1)
-    ax.set_title(title, fontsize=16, fontweight="bold")
-    ax.set_xlabel("LIME weight", fontsize=14)
-    ax.tick_params(axis="x", labelsize=12)
-    ax.tick_params(axis="y", labelsize=12)
+    # Support legacy single-attribution payloads.
+    if attr_sets and "kernel_width" not in attr_sets[0]:
+        attr_sets = [{"kernel_width": None, "attributions": attr_sets}]
+
+    cmap = plt.get_cmap("tab10")
+    palette = [cmap(idx % cmap.N) for idx in range(len(attr_sets))]
+    fig_height = 4 + (len(attr_sets) - 1) * 2.5
+    fig, axes = plt.subplots(
+        nrows=len(attr_sets),
+        ncols=1,
+        figsize=(12, fig_height),
+        sharex=True,
+        squeeze=False,
+    )
+
+    for idx, (ax, attr_set, base_color) in enumerate(
+        zip(axes[:, 0], attr_sets, palette)
+    ):
+        weights = {item["feature"]: item["weight"] for item in attr_set["attributions"]}
+        values = [weights.get(name, 0.0) for name in FEATURE_NAMES]
+        colors = [
+            base_color if weight >= 0 else _adjust_color_intensity(base_color, 0.6)
+            for weight in values
+        ]
+        ax.barh(FEATURE_NAMES, values, color=colors)
+        ax.axvline(0.0, color="#333333", linewidth=1)
+        kernel_width = attr_set.get("kernel_width")
+        suffix = f" (kernel width={kernel_width})" if kernel_width is not None else ""
+        ax.set_title(f"{title}{suffix}", fontsize=14, fontweight="bold")
+        ax.tick_params(axis="x", labelsize=12)
+        ax.tick_params(axis="y", labelsize=12)
+        if idx == len(attr_sets) - 1:
+            ax.set_xlabel("LIME weight", fontsize=13)
+
     plt.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=150)
@@ -269,56 +309,78 @@ def _generate_lime(
     )
     rudder_wrapper = LimeRudderWrapper(network)
     throttle_wrapper = LimeThrottleWrapper(network)
-    rudder_explainer = lime_tabular.LimeTabularExplainer(
-        training_data=features,
-        feature_names=FEATURE_NAMES,
-        mode="regression",
-        discretize_continuous=False,
-    )
-    throttle_explainer = lime_tabular.LimeTabularExplainer(
-        training_data=features,
-        feature_names=FEATURE_NAMES,
-        class_names=THROTTLE_LABELS,
-        discretize_continuous=False,
-    )
+    rudder_explainers = {
+        width: lime_tabular.LimeTabularExplainer(
+            training_data=features,
+            feature_names=FEATURE_NAMES,
+            mode="regression",
+            discretize_continuous=False,
+            kernel_width=width,
+        )
+        for width in KERNEL_WIDTHS
+    }
+    throttle_explainers = {
+        width: lime_tabular.LimeTabularExplainer(
+            training_data=features,
+            feature_names=FEATURE_NAMES,
+            class_names=THROTTLE_LABELS,
+            discretize_continuous=False,
+            kernel_width=width,
+        )
+        for width in KERNEL_WIDTHS
+    }
 
     explanations: List[dict] = []
     for item in trace:
         features = item.get("features") or item.get("obs") or []
         feature_vec = np.asarray(features, dtype=float)
         rudder_pred = float(rudder_wrapper.predict(np.asarray([feature_vec]))[0])
-        rudder_exp = rudder_explainer.explain_instance(
-            feature_vec,
-            rudder_wrapper.predict,
-            num_features=len(FEATURE_NAMES),
-        )
-        rudder_map = next(iter(rudder_exp.as_map().values()), [])
-        rudder_attr = [
-            {
-                "feature": FEATURE_NAMES[idx],
-                "weight": float(weight),
-                "value": float(feature_vec[idx]),
-            }
-            for idx, weight in rudder_map
-        ]
+        rudder_attr_sets = []
+        for kernel_width, explainer in rudder_explainers.items():
+            rudder_exp = explainer.explain_instance(
+                feature_vec,
+                rudder_wrapper.predict,
+                num_features=len(FEATURE_NAMES),
+            )
+            rudder_map = next(iter(rudder_exp.as_map().values()), [])
+            rudder_attr_sets.append(
+                {
+                    "kernel_width": kernel_width,
+                    "attributions": [
+                        {
+                            "feature": FEATURE_NAMES[idx],
+                            "weight": float(weight),
+                            "value": float(feature_vec[idx]),
+                        }
+                        for idx, weight in rudder_map
+                    ],
+                }
+            )
 
         throttle_probs = throttle_wrapper.predict_proba(np.asarray([feature_vec]))[0]
         throttle_label = int(np.argmax(throttle_probs))
-        throttle_exp = throttle_explainer.explain_instance(
-            feature_vec,
-            throttle_wrapper.predict_proba,
-            num_features=len(FEATURE_NAMES),
-            top_labels=1,
-        )
-        throttle_map = throttle_exp.as_map().get(throttle_label, [])
-        throttle_attr = [
-            {
-                "feature": FEATURE_NAMES[idx],
-                "weight": float(weight),
-                "value": float(feature_vec[idx]),
-            }
-            for idx, weight in throttle_map
-        ]
+        throttle_attr_sets = []
+        for kernel_width, explainer in throttle_explainers.items():
+            throttle_exp = explainer.explain_instance(
+                feature_vec,
+                throttle_wrapper.predict_proba,
+                num_features=len(FEATURE_NAMES),
+                top_labels=1,
+            )
+            throttle_map = throttle_exp.as_map().get(throttle_label, [])
+            throttle_attr_sets.append(
+                {
+                    "kernel_width": kernel_width,
+                    "attributions": [
+                        {
+                            "feature": FEATURE_NAMES[idx],
+                            "weight": float(weight),
+                            "value": float(feature_vec[idx]),
+                        }
+                        for idx, weight in throttle_map
+                    ],
+                }
+            )
 
         rudder_cmd = float(item.get("rudder_cmd", rudder_pred))
         helm_label = item.get("helm_label") or helm_label_from_rudder_cmd(rudder_cmd)
@@ -331,12 +393,12 @@ def _generate_lime(
                 "rudder_cmd": rudder_cmd,
                 "helm_label": helm_label,
                 "actual_rudder": actual_rudder,
-                "feature_attributions": rudder_attr,
+                "feature_attributions": rudder_attr_sets,
             },
             "throttle": {
                 "prediction": throttle_label,
                 "probabilities": throttle_probs.tolist(),
-                "feature_attributions": throttle_attr,
+                "feature_attributions": throttle_attr_sets,
             },
         }
         explanations.append(explanation)

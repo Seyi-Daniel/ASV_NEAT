@@ -250,6 +250,16 @@ straightforward to line up a specific command choice with its causal inputs,
 repeatable across all steps (`max_steps`) and across five canonical encounters
 per scenario type.
 
+#### Multi-kernel versus legacy single-kernel runs
+
+The default pipeline runs **three** LIME explainers per timestep (kernel widths
+0.5, 1.0, and 2.0) and stacks their bar plots vertically so you can compare how
+the locality parameter changes the attribution. If you want to reproduce the
+legacy, single-kernel behaviour (one explainer row), temporarily set
+`KERNEL_WIDTHS = [1.0]` near the top of `scripts/lime_explain.py` before
+running the command above. Previously generated single-kernel reports remain
+compatible with the combination utilities described below.
+
 ### SHAP explanation workflow
 
 For a global/stepwise view of feature importance, a parallel SHAP pipeline is
@@ -327,7 +337,10 @@ Each composite frame keeps the simulation render on the left and positions a
 height-matched 2×2 grid of plots on the right (LIME/SHAP rudder on the top row,
 LIME/SHAP throttle on the bottom row). The script normalises plot heights so the
 stack matches the scene, padding with whitespace to preserve readability instead
-of distorting images.
+of distorting images. If the captured frame already contains an attached plot
+overlay, the combiner trims the right-hand panel before composing. You can also
+cap the output size with `--max-width` / `--max-height` (defaults are
+1600×1200) to keep the generated GIFs lightweight.
 
 ---
 
