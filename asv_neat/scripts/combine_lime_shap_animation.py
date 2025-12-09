@@ -5,52 +5,25 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from typing import List, Sequence
+from typing import Dict, List
 
 import imageio.v2 as imageio
 from PIL import Image
 
-FRAME_FILENAME_PATTERN = re.compile(r"frame_(\d+)\.png")
-RUDDER_PLOT_PATTERN = re.compile(r"explanation_rudder_(\d+)\.png")
-THROTTLE_PLOT_PATTERN = re.compile(r"explanation_throttle_(\d+)\.png")
-
-
-def _find_matching_dir(base: Path, patterns: Sequence[re.Pattern[str]]) -> Path:
-    """Return the first directory under ``base`` containing files for all patterns."""
-
-    search_dirs: List[Path] = [base]
-    # Walk the tree so runs that embed plots/frames in nested scenario folders are detected.
-    search_dirs.extend(sorted((child for child in base.rglob("*") if child.is_dir())))
-
-    for candidate in search_dirs:
-        if all(any(pattern.fullmatch(item.name) for item in candidate.iterdir() if item.is_file()) for pattern in patterns):
-            return candidate
-    pattern_descriptions = ", ".join(p.pattern for p in patterns)
-    raise FileNotFoundError(f"Could not find directory under {base} with files matching: {pattern_descriptions}")
-
-
-def _discover_frame_dir(base: Path) -> Path | None:
-    try:
-        return _find_matching_dir(base, [FRAME_FILENAME_PATTERN])
-    except FileNotFoundError:
-        return None
-
-
-def _discover_plot_dir(base: Path) -> Path:
-    return _find_matching_dir(base, [RUDDER_PLOT_PATTERN, THROTTLE_PLOT_PATTERN])
-
-
-def _extract_steps(frame_dir: Path | None) -> List[int]:
-    if frame_dir is None:
-        return []
-    steps = []
-    for frame_path in frame_dir.iterdir():
-        if not frame_path.is_file():
+FRAME_FILENAME_PATTERN = re.compile(r"frame[_-]?(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE)
+RUDDER_PLOT_PATTERN = re.compile(r"explanation_rudder_(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE)
+THROTTLE_PLOT_PATTERN = re.compile(r"explanation_throttle_(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE)
+def _index_files(base: Path, pattern: re.Pattern[str]) -> Dict[int, Path]:
+    matches: Dict[int, Path] = {}
+    for candidate in base.rglob("*"):
+        if not candidate.is_file():
             continue
-        match = FRAME_FILENAME_PATTERN.fullmatch(frame_path.name)
-        if match:
-            steps.append(int(match.group(1)))
-    return sorted(set(steps))
+        match = pattern.fullmatch(candidate.name)
+        if not match:
+            continue
+        step = int(match.group(1))
+        matches.setdefault(step, candidate)
+    return matches
 
 
 def _resize_plot_to_height(path: Path, target_height: int) -> Image.Image:
@@ -132,14 +105,32 @@ def main() -> None:
     output_dir: Path = args.output_dir
     fps: int = args.fps
 
-    lime_frame_dir = _discover_frame_dir(lime_dir)
-    lime_plot_dir = _discover_plot_dir(lime_dir)
-    shap_frame_dir = _discover_frame_dir(shap_dir)
-    shap_plot_dir = _discover_plot_dir(shap_dir)
+    lime_frames = _index_files(lime_dir, FRAME_FILENAME_PATTERN)
+    shap_frames = _index_files(shap_dir, FRAME_FILENAME_PATTERN)
+    lime_rudder_plots = _index_files(lime_dir, RUDDER_PLOT_PATTERN)
+    lime_throttle_plots = _index_files(lime_dir, THROTTLE_PLOT_PATTERN)
+    shap_rudder_plots = _index_files(shap_dir, RUDDER_PLOT_PATTERN)
+    shap_throttle_plots = _index_files(shap_dir, THROTTLE_PLOT_PATTERN)
 
-    steps = _extract_steps(lime_frame_dir) or _extract_steps(shap_frame_dir)
+    print(
+        "Discovered assets: "
+        f"lime frames={len(lime_frames)}, shap frames={len(shap_frames)}, "
+        f"lime plots (rudder/throttle)={len(lime_rudder_plots)}/{len(lime_throttle_plots)}, "
+        f"shap plots (rudder/throttle)={len(shap_rudder_plots)}/{len(shap_throttle_plots)}"
+    )
+
+    steps = sorted(
+        set(lime_frames)
+        | set(shap_frames)
+        | set(lime_rudder_plots)
+        | set(lime_throttle_plots)
+        | set(shap_rudder_plots)
+        | set(shap_throttle_plots)
+    )
     if not steps:
-        raise RuntimeError("No frame images found in the provided directories.")
+        raise RuntimeError(
+            "No frame or plot images found; verify the provided directories contain outputs."
+        )
 
     combined_dir = output_dir / "combined_frames"
     combined_dir.mkdir(parents=True, exist_ok=True)
@@ -148,28 +139,20 @@ def main() -> None:
     combined_frames: List[Path] = []
 
     for step in steps:
-        frame_name = f"frame_{step:03d}.png"
-        rudder_name = f"explanation_rudder_{step:03d}.png"
-        throttle_name = f"explanation_throttle_{step:03d}.png"
+        scene_path = lime_frames.get(step) or shap_frames.get(step)
+        lime_rudder_path = lime_rudder_plots.get(step)
+        lime_throttle_path = lime_throttle_plots.get(step)
+        shap_rudder_path = shap_rudder_plots.get(step)
+        shap_throttle_path = shap_throttle_plots.get(step)
 
-        scene_path = lime_frame_dir / frame_name if lime_frame_dir else None
-        if scene_path is None or not scene_path.exists():
-            scene_path = shap_frame_dir / frame_name if shap_frame_dir else None
-        lime_rudder_path = lime_plot_dir / rudder_name
-        lime_throttle_path = lime_plot_dir / throttle_name
-        shap_rudder_path = shap_plot_dir / rudder_name
-        shap_throttle_path = shap_plot_dir / throttle_name
-
-        plot_required_paths = [
+        if not scene_path:
+            continue
+        if None in (
             lime_rudder_path,
             lime_throttle_path,
             shap_rudder_path,
             shap_throttle_path,
-        ]
-
-        if scene_path is None or not scene_path.exists():
-            continue
-        if not all(path.exists() for path in plot_required_paths):
+        ):
             continue
 
         composite = _compose_frame(
