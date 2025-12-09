@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List
 
 import imageio.v2 as imageio
+import numpy as np
 from PIL import Image
 
 FRAME_FILENAME_PATTERN = re.compile(r"frame[_-]?(\d+)\.(png|jpg|jpeg)$", re.IGNORECASE)
@@ -71,6 +72,41 @@ def _pad_plot_width(image: Image.Image, target_width: int) -> Image.Image:
     return canvas
 
 
+def _strip_overlay_from_scene(image: Image.Image) -> Image.Image:
+    """Remove a right-hand white plot overlay if present.
+
+    The combined scene frames sometimes contain an attached plot on the right
+    (white background). We detect the last non-white column and crop everything
+    to its left, preserving the raw simulation view.
+    """
+
+    data = np.asarray(image.convert("RGB"))
+    # Measure distance from pure white per pixel, then aggregate per column.
+    non_white = np.abs(data.astype(np.int16) - 255).sum(axis=2) > 30
+    col_activity = non_white.mean(axis=0)
+
+    # Find the last column with meaningful non-white content (scene data).
+    non_empty_cols = np.where(col_activity > 0.02)[0]
+    if len(non_empty_cols) == 0:
+        return image
+
+    last_content_col = int(non_empty_cols[-1])
+    cropped_width = max(1, last_content_col + 1)
+    if cropped_width >= image.width:
+        return image
+
+    return image.crop((0, 0, cropped_width, image.height))
+
+
+def _load_scene_image(scene_path: Path) -> Image.Image:
+    image = Image.open(scene_path).convert("RGB")
+    if COMBINED_RUDDER_PATTERN.fullmatch(scene_path.name) or COMBINED_THROTTLE_PATTERN.fullmatch(
+        scene_path.name
+    ):
+        return _strip_overlay_from_scene(image)
+    return image
+
+
 def _compose_frame(
     scene_path: Path,
     lime_rudder_path: Path,
@@ -78,7 +114,7 @@ def _compose_frame(
     shap_rudder_path: Path,
     shap_throttle_path: Path,
 ) -> Image.Image:
-    scene = Image.open(scene_path).convert("RGB")
+    scene = _load_scene_image(scene_path)
     top_height = scene.height // 2
     bottom_height = scene.height - top_height
 
