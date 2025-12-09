@@ -250,6 +250,16 @@ straightforward to line up a specific command choice with its causal inputs,
 repeatable across all steps (`max_steps`) and across five canonical encounters
 per scenario type.
 
+#### Multi-kernel versus legacy single-kernel runs
+
+The default pipeline runs **three** LIME explainers per timestep (kernel widths
+0.5, 1.0, and 2.0) and stacks their bar plots vertically so you can compare how
+the locality parameter changes the attribution. If you want to reproduce the
+legacy, single-kernel behaviour (one explainer row), temporarily set
+`KERNEL_WIDTHS = [1.0]` near the top of `scripts/lime_explain.py` before
+running the command above. Previously generated single-kernel reports remain
+compatible with the combination utilities described below.
+
 ### SHAP explanation workflow
 
 For a global/stepwise view of feature importance, a parallel SHAP pipeline is

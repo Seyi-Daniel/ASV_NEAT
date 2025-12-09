@@ -19,7 +19,8 @@ def _find_matching_dir(base: Path, patterns: Sequence[re.Pattern[str]]) -> Path:
     """Return the first directory under ``base`` containing files for all patterns."""
 
     search_dirs: List[Path] = [base]
-    search_dirs.extend([child for child in base.iterdir() if child.is_dir()])
+    # Walk the tree so runs that embed plots/frames in nested scenario folders are detected.
+    search_dirs.extend(sorted((child for child in base.rglob("*") if child.is_dir())))
 
     for candidate in search_dirs:
         if all(any(pattern.fullmatch(item.name) for item in candidate.iterdir() if item.is_file()) for pattern in patterns):
