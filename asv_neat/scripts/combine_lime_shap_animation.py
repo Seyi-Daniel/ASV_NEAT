@@ -76,23 +76,39 @@ def _strip_overlay_from_scene(image: Image.Image) -> Image.Image:
     """Remove a right-hand white plot overlay if present.
 
     The combined scene frames sometimes contain an attached plot on the right
-    (white background). We detect the last non-white column and crop everything
-    to its left, preserving the raw simulation view.
+    (white background). We look for a column boundary where the mean
+    "non-white" activity on the right side drops well below the left side.
     """
 
     data = np.asarray(image.convert("RGB"))
-    # Measure distance from pure white per pixel, then aggregate per column.
     non_white = np.abs(data.astype(np.int16) - 255).sum(axis=2) > 30
     col_activity = non_white.mean(axis=0)
 
-    # Find the last column with meaningful non-white content (scene data).
-    non_empty_cols = np.where(col_activity > 0.02)[0]
-    if len(non_empty_cols) == 0:
+    if len(col_activity) < 2:
         return image
 
-    last_content_col = int(non_empty_cols[-1])
-    cropped_width = max(1, last_content_col + 1)
-    if cropped_width >= image.width:
+    window = 7
+    smooth = np.convolve(col_activity, np.ones(window) / window, mode="same")
+
+    cumulative = np.cumsum(smooth)
+    total = cumulative[-1]
+
+    best_idx = None
+    best_diff = 0.0
+    for idx in range(len(smooth) - 1):
+        left_mean = cumulative[idx] / (idx + 1)
+        right_mean = (total - cumulative[idx]) / (len(smooth) - idx - 1)
+        diff = left_mean - right_mean
+        if diff > best_diff and left_mean > 0.02:
+            best_diff = diff
+            best_idx = idx
+
+    if best_idx is None or best_diff < 0.05:
+        return image
+
+    cropped_width = max(1, best_idx + 1)
+    # Only crop when the removed panel is meaningful; otherwise keep original.
+    if cropped_width >= image.width or (image.width - cropped_width) < max(20, int(image.width * 0.08)):
         return image
 
     return image.crop((0, 0, cropped_width, image.height))
@@ -164,12 +180,36 @@ def _pad_canvas(image: Image.Image, target_width: int, target_height: int) -> Im
     return padded
 
 
+def _fit_within(image: Image.Image, max_width: int, max_height: int) -> Image.Image:
+    if max_width <= 0 or max_height <= 0:
+        return image
+
+    scale = min(max_width / image.width, max_height / image.height, 1.0)
+    if scale >= 1.0:
+        return image
+
+    new_size = (max(1, int(image.width * scale)), max(1, int(image.height * scale)))
+    return image.resize(new_size, Image.LANCZOS)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lime-dir", type=Path, required=True, help="Path to LIME scenario output directory")
     parser.add_argument("--shap-dir", type=Path, required=True, help="Path to SHAP scenario output directory")
     parser.add_argument("--output-dir", type=Path, required=True, help="Directory for combined outputs")
     parser.add_argument("--fps", type=int, default=8, help="Frames per second for the final GIF")
+    parser.add_argument(
+        "--max-width",
+        type=int,
+        default=1600,
+        help="Maximum output width for composed frames (resizes down if needed)",
+    )
+    parser.add_argument(
+        "--max-height",
+        type=int,
+        default=1200,
+        help="Maximum output height for composed frames (resizes down if needed)",
+    )
     return parser
 
 
@@ -180,6 +220,8 @@ def main() -> None:
     shap_dir: Path = args.shap_dir
     output_dir: Path = args.output_dir
     fps: int = args.fps
+    max_width: int = args.max_width
+    max_height: int = args.max_height
 
     lime_frames = _index_scene_frames(lime_dir)
     shap_frames = _index_scene_frames(shap_dir)
@@ -213,8 +255,8 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     composites: List[tuple[int, Image.Image]] = []
-    max_width = 0
-    max_height = 0
+    natural_max_width = 0
+    natural_max_height = 0
 
     for step in steps:
         scene_path = lime_frames.get(step) or shap_frames.get(step)
@@ -240,18 +282,22 @@ def main() -> None:
             shap_rudder_path,
             shap_throttle_path,
         )
-        max_width = max(max_width, composite.width)
-        max_height = max(max_height, composite.height)
+        natural_max_width = max(natural_max_width, composite.width)
+        natural_max_height = max(natural_max_height, composite.height)
         composites.append((step, composite))
 
     if not composites:
         raise RuntimeError("No combined frames were generated; ensure required frames and plots exist.")
 
     combined_frames: List[Path] = []
+    final_width = min(natural_max_width, max_width) if max_width > 0 else natural_max_width
+    final_height = min(natural_max_height, max_height) if max_height > 0 else natural_max_height
+
     for step, composite in composites:
-        padded = _pad_canvas(composite, max_width, max_height)
+        padded = _pad_canvas(composite, natural_max_width, natural_max_height)
+        resized = _fit_within(padded, final_width, final_height)
         output_path = combined_dir / f"combined_{step:03d}.png"
-        padded.save(output_path)
+        resized.save(output_path)
         combined_frames.append(output_path)
 
     images = [imageio.imread(frame_path) for frame_path in combined_frames]

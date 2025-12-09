@@ -337,7 +337,10 @@ Each composite frame keeps the simulation render on the left and positions a
 height-matched 2×2 grid of plots on the right (LIME/SHAP rudder on the top row,
 LIME/SHAP throttle on the bottom row). The script normalises plot heights so the
 stack matches the scene, padding with whitespace to preserve readability instead
-of distorting images.
+of distorting images. If the captured frame already contains an attached plot
+overlay, the combiner trims the right-hand panel before composing. You can also
+cap the output size with `--max-width` / `--max-height` (defaults are
+1600×1200) to keep the generated GIFs lightweight.
 
 ---
 
