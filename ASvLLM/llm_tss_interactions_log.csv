@@ -1,0 +1,702 @@
+llm_call_id,simulation_time_s,involved_vessels,prompt_data,llm_response_json
+1,5.02,"Red (ID: 133765512715040), Blue (ID: 133765552868960)","
+""You are a ship navigation expert system following COLREGs.
+Analyze the provided image and the **current** vessel data below. Also consider the **recent history** of the situation and decisions made.
+
+**Current Situation Analysis Task:**
+
+**Analysis Instructions:**
+1.  **Overtaking vs. Head-on:** An 'Overtaking' situation occurs when one vessel (faster) approaches another from a relative bearing near 0°, while the other vessel (slower) sees the first at a relative bearing near 180°. A 'Head-on' situation involves two vessels on reciprocal courses.
+2.  **Crossing:** A 'Crossing' situation occurs when two power-driven vessels' paths cross. The vessel which has the other on her own starboard side is the 'Give-way' vessel.
+3.  **Roles:** Assign 'Give-way' (must take action) or 'Stand-on' (must maintain course and speed).
+
+**Output Format Requirements:**
+Respond ONLY with a JSON array of objects {id, situation, role, action} for each vessel listed in the main '--- Current Vessel Data ---' section.
+The 'action' value MUST be one of the following exact phrases:
+- 'Alter course to starboard'
+- 'Alter course to port'
+- 'Reduce speed'
+- 'Pass astern'
+- 'Accelerate'
+- 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 133765512715040, position: (400.0, 534.4) px, heading: 0.0°, speed: 36.6 km/h
+  Other vessels:
+    - id: 133765552868960, pos: (400.0,681.8) px, heading: 0.0°, speed: 54.7 km/h, dist: 0.147 km, relBearing: 180.0°
+- id: 133765552868960, position: (400.0, 681.8) px, heading: 0.0°, speed: 54.7 km/h
+  Other vessels:
+    - id: 133765512715040, pos: (400.0,534.4) px, heading: 0.0°, speed: 36.6 km/h, dist: 0.147 km, relBearing: 0.0°","[
+    {
+        ""id"": 133765512715040,
+        ""situation"": ""Overtaking"",
+        ""role"": ""Stand-on"",
+        ""action"": ""Maintain course and speed""
+    },
+    {
+        ""id"": 133765552868960,
+        ""situation"": ""Overtaking"",
+        ""role"": ""Give-way"",
+        ""action"": ""Alter course to starboard""
+    }
+]"
+1,5.00,Blue (ID: 133765478357600),"
+""You are a meticulous ship navigation AI following COLREGs Rule 10 (TSS) and Rules 13-17.
+Analyze the image, current data, and recent history for the **single crossing vessel** below.
+
+**OVERRIDING OBJECTIVE (Rule 10(c)):** Your primary goal is to maintain a heading as nearly as practicable at right angles (perpendicular, Target Heading: 0°/North or 180°/South) to the traffic flow. **Deviations from this heading are temporary and must be minimized.**
+
+**Current Situation Analysis & Action Required:**
+
+**Action Strategy (Prioritizing Perpendicular Track):**
+Your task is to choose the *single best action* from the list below.
+1.  **Assess Risk:** Look at the 'Other vessels' data. Pay close attention to `dist_km` and `TCPA` (Time to Closest Point of Approach).
+2.  **IF PATH IS CLEAR (No conflict):**
+    - **Check Speed:** Is the vessel already at its max speed (approx 107 km/h for Francisco)?
+        - **IF YES:** Action: 'Maintain course and speed'
+        - **IF NO:** Action: 'Accelerate' (This is the command to reach max speed while on the perpendicular track).
+3.  **IF CONFLICT EXISTS (RISK OF COLLISION):**
+    - **First, analyze speed:** Can the conflict be resolved by adjusting speed *without turning*?
+    - **Check: Can I accelerate?** Look at the `TCPA` and `dist_km`. Is there *enough time and space* to accelerate and cross *in front of* the other vessel safely?
+        - **IF YES:** This is the preferred tactic.
+        - **Action: 'Accelerate'**
+    - **Check: Must I slow down?** If accelerating is not safe (threat is too close, TCPA is too low), will slowing down allow the vessel to pass safely ahead of you?
+        - **IF YES:** This is the second-best tactic.
+        - **Action: 'Reduce speed'**
+    - **Last Resort (Course Change):** If and ONLY if a speed adjustment is clearly insufficient or unsafe (e.g., risk is imminent, DCPA is near zero), then you must alter course.
+        - **Action: 'Alter course to starboard'** (preferred) or 'Pass astern'.
+**Decision Focus:** Respond ONLY with a JSON array containing ONE object for the crossing vessel.
+
+**Output Format Requirements:**
+JSON object must have keys: ""id"", ""situation"", ""role"", ""action"".
+1.  `""id""`: Integer ID.
+2.  `""situation""`: Brief description.
+3.  `""role""`: Role relative to immediate threat.
+4.  `""action""`: ONE of the exact phrases below:
+    - 'Alter course to starboard'
+    - 'Alter course to port'
+    - 'Reduce speed'
+    - 'Pass astern'
+    - 'Accelerate'
+    - 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 133765478357600, position: (400.0, 722.0) px, heading: 0.0°, speed: 54.6 km/h
+  Other vessels (Traffic):
+    - id: 133765274877104, pos: (103.1,480.0) px, heading: 90.0°, speed: 67.0 km/h, dist: 0.383 km, relBearing: 309.2° (TCPA: 16.0s, DCPA: 0.000km)
+    - id: 133765478609792, pos: (1016.9,320.0) px, heading: 270.0°, speed: 67.0 km/h, dist: 0.736 km, relBearing: 56.9° (TCPA: 30.5s, DCPA: 0.078km)","[
+    {
+        ""id"": 133765478357600,
+        ""situation"": ""Risk of collision with vessel 133765274877104."",
+        ""role"": ""Give-way vessel"",
+        ""action"": ""Alter course to starboard""
+    }
+]"
+2,10.01,Blue (ID: 133765478357600),"
+""You are a meticulous ship navigation AI following COLREGs Rule 10 (TSS) and Rules 13-17.
+Analyze the image, current data, and recent history for the **single crossing vessel** below.
+
+**OVERRIDING OBJECTIVE (Rule 10(c)):** Your primary goal is to maintain a heading as nearly as practicable at right angles (perpendicular, Target Heading: 0°/North or 180°/South) to the traffic flow. **Deviations from this heading are temporary and must be minimized.**
+
+**Recent History (Most recent first):**
+--- History Step T-1 ---
+Vessel States (T-1):
+  - id: 133765478609792, pos: ('1016.9', '320.0'), heading: 270.0°, speed: 67.0 km/h
+  - id: 133765274877104, pos: ('103.1', '480.0'), heading: 90.0°, speed: 67.0 km/h
+  - id: 133765478357600, pos: ('400.0', '722.0'), heading: 0.0°, speed: 54.6 km/h
+Decision Made (T-1):
+  - id: 133765478357600, situation: Risk of collision with vessel 133765274877104., role: Give-way vessel, action: Alter course to starboard
+
+---
+
+**Current Situation Analysis & Action Required:**
+
+**Action Strategy (Prioritizing Perpendicular Track):**
+Your task is to choose the *single best action* from the list below.
+1.  **Assess Risk:** Look at the 'Other vessels' data. Pay close attention to `dist_km` and `TCPA` (Time to Closest Point of Approach).
+2.  **IF PATH IS CLEAR (No conflict):**
+    - **Check Speed:** Is the vessel already at its max speed (approx 107 km/h for Francisco)?
+        - **IF YES:** Action: 'Maintain course and speed'
+        - **IF NO:** Action: 'Accelerate' (This is the command to reach max speed while on the perpendicular track).
+3.  **IF CONFLICT EXISTS (RISK OF COLLISION):**
+    - **First, analyze speed:** Can the conflict be resolved by adjusting speed *without turning*?
+    - **Check: Can I accelerate?** Look at the `TCPA` and `dist_km`. Is there *enough time and space* to accelerate and cross *in front of* the other vessel safely?
+        - **IF YES:** This is the preferred tactic.
+        - **Action: 'Accelerate'**
+    - **Check: Must I slow down?** If accelerating is not safe (threat is too close, TCPA is too low), will slowing down allow the vessel to pass safely ahead of you?
+        - **IF YES:** This is the second-best tactic.
+        - **Action: 'Reduce speed'**
+    - **Last Resort (Course Change):** If and ONLY if a speed adjustment is clearly insufficient or unsafe (e.g., risk is imminent, DCPA is near zero), then you must alter course.
+        - **Action: 'Alter course to starboard'** (preferred) or 'Pass astern'.
+**Decision Focus:** Respond ONLY with a JSON array containing ONE object for the crossing vessel.
+
+**Output Format Requirements:**
+JSON object must have keys: ""id"", ""situation"", ""role"", ""action"".
+1.  `""id""`: Integer ID.
+2.  `""situation""`: Brief description.
+3.  `""role""`: Role relative to immediate threat.
+4.  `""action""`: ONE of the exact phrases below:
+    - 'Alter course to starboard'
+    - 'Alter course to port'
+    - 'Reduce speed'
+    - 'Pass astern'
+    - 'Accelerate'
+    - 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 133765478357600, position: (449.9, 620.7) px, heading: 29.3°, speed: 109.1 km/h
+  Other vessels (Traffic):
+    - id: 133765478609792, pos: (923.8,320.0) px, heading: 270.0°, speed: 67.0 km/h, dist: 0.561 km, relBearing: 28.3° (TCPA: 13.1s, DCPA: 0.058km)","[
+    {
+        ""id"": 133765478357600,
+        ""situation"": ""Risk of collision with vessel 133765478609792."",
+        ""role"": ""Give-way vessel"",
+        ""action"": ""Reduce speed""
+    }
+]"
+3,15.01,Blue (ID: 133765478357600),"
+""You are a meticulous ship navigation AI following COLREGs Rule 10 (TSS) and Rules 13-17.
+Analyze the image, current data, and recent history for the **single crossing vessel** below.
+
+**OVERRIDING OBJECTIVE (Rule 10(c)):** Your primary goal is to maintain a heading as nearly as practicable at right angles (perpendicular, Target Heading: 0°/North or 180°/South) to the traffic flow. **Deviations from this heading are temporary and must be minimized.**
+
+**Recent History (Most recent first):**
+--- History Step T-1 ---
+Vessel States (T-1):
+  - id: 133765478609792, pos: ('923.8', '320.0'), heading: 270.0°, speed: 67.0 km/h
+  - id: 133765478357600, pos: ('449.9', '620.7'), heading: 29.3°, speed: 109.1 km/h
+Decision Made (T-1):
+  - id: 133765478357600, situation: Risk of collision with vessel 133765478609792., role: Give-way vessel, action: Reduce speed
+
+--- History Step T-2 ---
+Vessel States (T-2):
+  - id: 133765478609792, pos: ('1016.9', '320.0'), heading: 270.0°, speed: 67.0 km/h
+  - id: 133765274877104, pos: ('103.1', '480.0'), heading: 90.0°, speed: 67.0 km/h
+  - id: 133765478357600, pos: ('400.0', '722.0'), heading: 0.0°, speed: 54.6 km/h
+Decision Made (T-2):
+  - id: 133765478357600, situation: Risk of collision with vessel 133765274877104., role: Give-way vessel, action: Alter course to starboard
+
+---
+
+**Current Situation Analysis & Action Required:**
+
+**Action Strategy (Prioritizing Perpendicular Track):**
+Your task is to choose the *single best action* from the list below.
+1.  **Assess Risk:** Look at the 'Other vessels' data. Pay close attention to `dist_km` and `TCPA` (Time to Closest Point of Approach).
+2.  **IF PATH IS CLEAR (No conflict):**
+    - **Check Speed:** Is the vessel already at its max speed (approx 107 km/h for Francisco)?
+        - **IF YES:** Action: 'Maintain course and speed'
+        - **IF NO:** Action: 'Accelerate' (This is the command to reach max speed while on the perpendicular track).
+3.  **IF CONFLICT EXISTS (RISK OF COLLISION):**
+    - **First, analyze speed:** Can the conflict be resolved by adjusting speed *without turning*?
+    - **Check: Can I accelerate?** Look at the `TCPA` and `dist_km`. Is there *enough time and space* to accelerate and cross *in front of* the other vessel safely?
+        - **IF YES:** This is the preferred tactic.
+        - **Action: 'Accelerate'**
+    - **Check: Must I slow down?** If accelerating is not safe (threat is too close, TCPA is too low), will slowing down allow the vessel to pass safely ahead of you?
+        - **IF YES:** This is the second-best tactic.
+        - **Action: 'Reduce speed'**
+    - **Last Resort (Course Change):** If and ONLY if a speed adjustment is clearly insufficient or unsafe (e.g., risk is imminent, DCPA is near zero), then you must alter course.
+        - **Action: 'Alter course to starboard'** (preferred) or 'Pass astern'.
+**Decision Focus:** Respond ONLY with a JSON array containing ONE object for the crossing vessel.
+
+**Output Format Requirements:**
+JSON object must have keys: ""id"", ""situation"", ""role"", ""action"".
+1.  `""id""`: Integer ID.
+2.  `""situation""`: Brief description.
+3.  `""role""`: Role relative to immediate threat.
+4.  `""action""`: ONE of the exact phrases below:
+    - 'Alter course to starboard'
+    - 'Alter course to port'
+    - 'Reduce speed'
+    - 'Pass astern'
+    - 'Accelerate'
+    - 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 133765478357600, position: (505.4, 521.7) px, heading: 29.3°, speed: 54.5 km/h
+  Other vessels (Traffic):
+    - id: 133765478609792, pos: (830.7,320.0) px, heading: 270.0°, speed: 67.0 km/h, dist: 0.383 km, relBearing: 28.9° (TCPA: 13.1s, DCPA: 0.033km)","[
+    {
+        ""id"": 133765478357600,
+        ""situation"": ""Risk of collision with vessel 133765478609792."",
+        ""role"": ""Give-way vessel"",
+        ""action"": ""Reduce speed""
+    }
+]"
+1,5.01,Blue (ID: 130865690955696),"
+""You are a meticulous ship navigation AI following COLREGs Rule 10 (TSS) and Rules 13-17.
+Analyze the image, current data, and recent history for the **single crossing vessel** below.
+
+**OVERRIDING OBJECTIVE (Rule 10(c)):** Your primary goal is to maintain a heading as nearly as practicable at right angles (perpendicular, Target Heading: 0°/North or 180°/South) to the traffic flow. **Deviations from this heading are temporary and must be minimized.**
+
+**Current Situation Analysis & Action Required:**
+
+**Action Strategy (Prioritizing Perpendicular Track):**
+Your task is to choose the *single best action* from the list below.
+1.  **Assess Risk:** Look at the 'Other vessels' data. Pay close attention to `dist_km` and `TCPA` (Time to Closest Point of Approach).
+2.  **IF PATH IS CLEAR (No conflict):**
+    - **Check Speed:** Is the vessel already at its max speed (approx 107 km/h for Francisco)?
+        - **IF YES:** Action: 'Maintain course and speed'
+        - **IF NO:** Action: 'Accelerate' (This is the command to reach max speed while on the perpendicular track).
+3.  **IF CONFLICT EXISTS (RISK OF COLLISION):**
+    - **First, analyze speed:** Can the conflict be resolved by adjusting speed *without turning*?
+    - **Check: Can I accelerate?** Look at the `TCPA` and `dist_km`. Is there *enough time and space* to accelerate and cross *in front of* the other vessel safely?
+        - **IF YES:** This is the preferred tactic.
+        - **Action: 'Accelerate'**
+    - **Check: Must I slow down?** If accelerating is not safe (threat is too close, TCPA is too low), will slowing down allow the vessel to pass safely ahead of you?
+        - **IF YES:** This is the second-best tactic.
+        - **Action: 'Reduce speed'**
+    - **Last Resort (Course Change):** If and ONLY if a speed adjustment is clearly insufficient or unsafe (e.g., risk is imminent, DCPA is near zero), then you must alter course.
+        - **Action: 'Alter course to starboard'** (preferred) or 'Pass astern'.
+**Decision Focus:** Respond ONLY with a JSON array containing ONE object for the crossing vessel.
+
+**Output Format Requirements:**
+JSON object must have keys: ""id"", ""situation"", ""role"", ""action"".
+1.  `""id""`: Integer ID.
+2.  `""situation""`: Brief description.
+3.  `""role""`: Role relative to immediate threat.
+4.  `""action""`: ONE of the exact phrases below:
+    - 'Alter course to starboard'
+    - 'Alter course to port'
+    - 'Reduce speed'
+    - 'Pass astern'
+    - 'Accelerate'
+    - 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 130865690955696, position: (400.0, 721.9) px, heading: 0.0°, speed: 54.6 km/h
+  Other vessels (Traffic):
+    - id: 130865868351072, pos: (103.2,480.0) px, heading: 90.0°, speed: 67.0 km/h, dist: 0.383 km, relBearing: 309.2° (TCPA: 15.9s, DCPA: 0.000km)
+    - id: 130865690955792, pos: (1016.8,320.0) px, heading: 270.0°, speed: 67.0 km/h, dist: 0.736 km, relBearing: 56.9° (TCPA: 30.5s, DCPA: 0.078km)","[
+    {
+        ""id"": 130865868351072,
+        ""situation"": ""High collision risk with DCPA of 0.000 km and TCPA of 15.9s."",
+        ""role"": ""Crossing vessel on port side with imminent collision threat."",
+        ""action"": ""Alter course to starboard""
+    }
+]"
+3,15.02,Blue (ID: 130865690955696),"
+""You are a meticulous ship navigation AI following COLREGs Rule 10 (TSS) and Rules 13-17.
+Analyze the image, current data, and recent history for the **single crossing vessel** below.
+
+**OVERRIDING OBJECTIVE (Rule 10(c)):** Your primary goal is to maintain a heading as nearly as practicable at right angles (perpendicular, Target Heading: 0°/North or 180°/South) to the traffic flow. **Deviations from this heading are temporary and must be minimized.**
+
+**Recent History (Most recent first):**
+--- History Step T-1 ---
+Vessel States (T-1):
+  - id: 130865690955792, pos: ('1016.8', '320.0'), heading: 270.0°, speed: 67.0 km/h
+  - id: 130865690955696, pos: ('400.0', '721.9'), heading: 0.0°, speed: 54.6 km/h
+  - id: 130865868351072, pos: ('103.2', '480.0'), heading: 90.0°, speed: 67.0 km/h
+Decision Made (T-1):
+  - id: 130865868351072, situation: High collision risk with DCPA of 0.000 km and TCPA of 15.9s., role: Crossing vessel on port side with imminent collision threat., action: Alter course to starboard
+
+---
+
+**Current Situation Analysis & Action Required:**
+
+**Action Strategy (Prioritizing Perpendicular Track):**
+Your task is to choose the *single best action* from the list below.
+1.  **Assess Risk:** Look at the 'Other vessels' data. Pay close attention to `dist_km` and `TCPA` (Time to Closest Point of Approach).
+2.  **IF PATH IS CLEAR (No conflict):**
+    - **Check Speed:** Is the vessel already at its max speed (approx 107 km/h for Francisco)?
+        - **IF YES:** Action: 'Maintain course and speed'
+        - **IF NO:** Action: 'Accelerate' (This is the command to reach max speed while on the perpendicular track).
+3.  **IF CONFLICT EXISTS (RISK OF COLLISION):**
+    - **First, analyze speed:** Can the conflict be resolved by adjusting speed *without turning*?
+    - **Check: Can I accelerate?** Look at the `TCPA` and `dist_km`. Is there *enough time and space* to accelerate and cross *in front of* the other vessel safely?
+        - **IF YES:** This is the preferred tactic.
+        - **Action: 'Accelerate'**
+    - **Check: Must I slow down?** If accelerating is not safe (threat is too close, TCPA is too low), will slowing down allow the vessel to pass safely ahead of you?
+        - **IF YES:** This is the second-best tactic.
+        - **Action: 'Reduce speed'**
+    - **Last Resort (Course Change):** If and ONLY if a speed adjustment is clearly insufficient or unsafe (e.g., risk is imminent, DCPA is near zero), then you must alter course.
+        - **Action: 'Alter course to starboard'** (preferred) or 'Pass astern'.
+**Decision Focus:** Respond ONLY with a JSON array containing ONE object for the crossing vessel.
+
+**Output Format Requirements:**
+JSON object must have keys: ""id"", ""situation"", ""role"", ""action"".
+1.  `""id""`: Integer ID.
+2.  `""situation""`: Brief description.
+3.  `""role""`: Role relative to immediate threat.
+4.  `""action""`: ONE of the exact phrases below:
+    - 'Alter course to starboard'
+    - 'Alter course to port'
+    - 'Reduce speed'
+    - 'Pass astern'
+    - 'Accelerate'
+    - 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 130865690955696, position: (400.0, 420.7) px, heading: 0.0°, speed: 150.0 km/h
+  Other vessels (Traffic):
+    - id: 130865743176352, pos: (510.5,320.0) px, heading: 270.0°, speed: 67.0 km/h, dist: 0.150 km, relBearing: 47.7° (TCPA: 3.0s, DCPA: 0.060km)","[
+    {
+        ""id"": 130865690955696,
+        ""situation"": ""Imminent high collision risk with TCPA of 3.0s and DCPA of 0.060 km."",
+        ""role"": ""Crossing vessel with priority on course adjustment."",
+        ""action"": ""Alter course to starboard""
+    }
+]"
+1,5.00,"Red (ID: 129216904710144), Blue (ID: 129216700675616), Green (ID: 129216656282432)","
+""You are a ship navigation expert system following COLREGs.
+Analyze the provided image and the **current** vessel data below. Also consider the **recent history** of the situation and decisions made.
+
+**Current Situation Analysis Task:**
+
+**Analysis Instructions:**
+1.  **Overtaking vs. Head-on:** An 'Overtaking' situation occurs when one vessel (faster) approaches another from a relative bearing near 0°, while the other vessel (slower) sees the first at a relative bearing near 180°. A 'Head-on' situation involves two vessels on reciprocal courses.
+2.  **Crossing:** A 'Crossing' situation occurs when two power-driven vessels' paths cross. The vessel which has the other on her own starboard side is the 'Give-way' vessel.
+3.  **Roles:** Assign 'Give-way' (must take action) or 'Stand-on' (must maintain course and speed).
+
+**Output Format Requirements:**
+Respond ONLY with a JSON array of objects {id, situation, role, action} for each vessel listed in the main '--- Current Vessel Data ---' section.
+The 'action' value MUST be one of the following exact phrases:
+- 'Alter course to starboard'
+- 'Alter course to port'
+- 'Reduce speed'
+- 'Pass astern'
+- 'Accelerate'
+- 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 129216904710144, position: (105.5, 400.0) px, heading: 90.0°, speed: 36.5 km/h
+  Other vessels:
+    - id: 129216700675616, pos: (694.5,400.0) px, heading: 270.0°, speed: 36.5 km/h, dist: 0.589 km, relBearing: 0.0°
+    - id: 129216656282432, pos: (400.0,694.5) px, heading: 0.0°, speed: 36.5 km/h, dist: 0.417 km, relBearing: 45.0°
+- id: 129216700675616, position: (694.5, 400.0) px, heading: 270.0°, speed: 36.5 km/h
+  Other vessels:
+    - id: 129216904710144, pos: (105.5,400.0) px, heading: 90.0°, speed: 36.5 km/h, dist: 0.589 km, relBearing: 0.0°
+    - id: 129216656282432, pos: (400.0,694.5) px, heading: 0.0°, speed: 36.5 km/h, dist: 0.417 km, relBearing: 315.0°
+- id: 129216656282432, position: (400.0, 694.5) px, heading: 0.0°, speed: 36.5 km/h
+  Other vessels:
+    - id: 129216904710144, pos: (105.5,400.0) px, heading: 90.0°, speed: 36.5 km/h, dist: 0.417 km, relBearing: 315.0°
+    - id: 129216700675616, pos: (694.5,400.0) px, heading: 270.0°, speed: 36.5 km/h, dist: 0.417 km, relBearing: 45.0°","[
+    {
+        ""id"": 129216904710144,
+        ""situation"": ""Head-on"",
+        ""role"": ""Give-way"",
+        ""action"": ""Alter course to starboard""
+    },
+    {
+        ""id"": 129216700675616,
+        ""situation"": ""Head-on"",
+        ""role"": ""Give-way"",
+        ""action"": ""Alter course to starboard""
+    },
+    {
+        ""id"": 129216656282432,
+        ""situation"": ""Crossing"",
+        ""role"": ""Stand-on"",
+        ""action"": ""Maintain course and speed""
+    }
+]"
+2,15.16,"Blue (ID: 129216700675616), Green (ID: 129216656282432)","
+""You are a ship navigation expert system following COLREGs.
+Analyze the provided image and the **current** vessel data below. Also consider the **recent history** of the situation and decisions made.
+
+**Recent History (Most recent first):**
+--- History Step T-1 ---
+Vessel States (T-1):
+  - id: 129216904710144, pos: ('105.5', '400.0'), heading: 90.0°, speed: 36.5 km/h
+  - id: 129216700675616, pos: ('694.5', '400.0'), heading: 270.0°, speed: 36.5 km/h
+  - id: 129216656282432, pos: ('400.0', '694.5'), heading: 0.0°, speed: 36.5 km/h
+Decision Made (T-1):
+  - id: 129216904710144, situation: Head-on, role: Give-way, action: Alter course to starboard
+  - id: 129216700675616, situation: Head-on, role: Give-way, action: Alter course to starboard
+  - id: 129216656282432, situation: Crossing, role: Stand-on, action: Maintain course and speed
+
+---
+
+**Current Situation Analysis Task:**
+
+**Analysis Instructions:**
+1.  **Overtaking vs. Head-on:** An 'Overtaking' situation occurs when one vessel (faster) approaches another from a relative bearing near 0°, while the other vessel (slower) sees the first at a relative bearing near 180°. A 'Head-on' situation involves two vessels on reciprocal courses.
+2.  **Crossing:** A 'Crossing' situation occurs when two power-driven vessels' paths cross. The vessel which has the other on her own starboard side is the 'Give-way' vessel.
+3.  **Roles:** Assign 'Give-way' (must take action) or 'Stand-on' (must maintain course and speed).
+
+**Output Format Requirements:**
+Respond ONLY with a JSON array of objects {id, situation, role, action} for each vessel listed in the main '--- Current Vessel Data ---' section.
+The 'action' value MUST be one of the following exact phrases:
+- 'Alter course to starboard'
+- 'Alter course to port'
+- 'Reduce speed'
+- 'Pass astern'
+- 'Accelerate'
+- 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 129216700675616, position: (543.7, 320.1) px, heading: 297.8°, speed: 67.0 km/h
+  Other vessels:
+    - id: 129216656282432, pos: (400.0,523.2) px, heading: 0.0°, speed: 67.0 km/h, dist: 0.249 km, relBearing: 277.4°
+- id: 129216656282432, position: (400.0, 523.2) px, heading: 0.0°, speed: 67.0 km/h
+  Other vessels:
+    - id: 129216700675616, pos: (543.7,320.1) px, heading: 297.8°, speed: 67.0 km/h, dist: 0.249 km, relBearing: 35.3°","[
+    {
+        ""id"": 129216700675616,
+        ""situation"": ""Crossing"",
+        ""role"": ""Give-way"",
+        ""action"": ""Alter course to starboard""
+    },
+    {
+        ""id"": 129216656282432,
+        ""situation"": ""Crossing"",
+        ""role"": ""Stand-on"",
+        ""action"": ""Maintain course and speed""
+    }
+]"
+3,15.24,Red (ID: 129216904710144),"
+""You are a ship navigation expert system following COLREGs.
+Analyze the provided image and the **current** vessel data below. Also consider the **recent history** of the situation and decisions made.
+
+**Recent History (Most recent first):**
+--- History Step T-1 ---
+Vessel States (T-1):
+  - id: 129216700675616, pos: ('543.7', '320.1'), heading: 297.8°, speed: 67.0 km/h
+  - id: 129216656282432, pos: ('400.0', '523.2'), heading: 0.0°, speed: 67.0 km/h
+Decision Made (T-1):
+  - id: 129216700675616, situation: Crossing, role: Give-way, action: Alter course to starboard
+  - id: 129216656282432, situation: Crossing, role: Stand-on, action: Maintain course and speed
+
+--- History Step T-2 ---
+Vessel States (T-2):
+  - id: 129216904710144, pos: ('105.5', '400.0'), heading: 90.0°, speed: 36.5 km/h
+  - id: 129216700675616, pos: ('694.5', '400.0'), heading: 270.0°, speed: 36.5 km/h
+  - id: 129216656282432, pos: ('400.0', '694.5'), heading: 0.0°, speed: 36.5 km/h
+Decision Made (T-2):
+  - id: 129216904710144, situation: Head-on, role: Give-way, action: Alter course to starboard
+  - id: 129216700675616, situation: Head-on, role: Give-way, action: Alter course to starboard
+  - id: 129216656282432, situation: Crossing, role: Stand-on, action: Maintain course and speed
+
+---
+
+**Current Situation Analysis Task:**
+
+**Analysis Instructions:**
+1.  **Overtaking vs. Head-on:** An 'Overtaking' situation occurs when one vessel (faster) approaches another from a relative bearing near 0°, while the other vessel (slower) sees the first at a relative bearing near 180°. A 'Head-on' situation involves two vessels on reciprocal courses.
+2.  **Crossing:** A 'Crossing' situation occurs when two power-driven vessels' paths cross. The vessel which has the other on her own starboard side is the 'Give-way' vessel.
+3.  **Roles:** Assign 'Give-way' (must take action) or 'Stand-on' (must maintain course and speed).
+
+**Output Format Requirements:**
+Respond ONLY with a JSON array of objects {id, situation, role, action} for each vessel listed in the main '--- Current Vessel Data ---' section.
+The 'action' value MUST be one of the following exact phrases:
+- 'Alter course to starboard'
+- 'Alter course to port'
+- 'Reduce speed'
+- 'Pass astern'
+- 'Accelerate'
+- 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 129216904710144, position: (257.7, 480.7) px, heading: 117.0°, speed: 67.0 km/h
+  Other vessels:
+    - id: 129216656282432, pos: (400.0,521.6) px, heading: 0.0°, speed: 67.0 km/h, dist: 0.148 km, relBearing: 349.0°","[
+    {
+        ""id"": ""129216904710144"",
+        ""situation"": ""Crossing"",
+        ""role"": ""Give-way"",
+        ""action"": ""Alter course to starboard""
+    },
+    {
+        ""id"": ""129216656282432"",
+        ""situation"": ""Crossing"",
+        ""role"": ""Stand-on"",
+        ""action"": ""Maintain course and speed""
+    }
+]"
+1,5.00,Blue (ID: 129216904710144),"
+""You are a meticulous ship navigation AI following COLREGs Rule 10 (TSS) and Rules 13-17.
+Analyze the image, current data, and recent history for the **single crossing vessel** below.
+
+**OVERRIDING OBJECTIVE (Rule 10(c)):** Your primary goal is to maintain a heading as nearly as practicable at right angles (perpendicular, Target Heading: 0°/North or 180°/South) to the traffic flow. **Deviations from this heading are temporary and must be minimized.**
+
+**Current Situation Analysis & Action Required:**
+
+**Action Strategy (Prioritizing Perpendicular Track):**
+Your task is to choose the *single best action* from the list below.
+1.  **Assess Risk:** Look at the 'Other vessels' data. Pay close attention to `dist_km` and `TCPA` (Time to Closest Point of Approach).
+2.  **IF PATH IS CLEAR (No conflict):**
+    - **Check Speed:** Is the vessel already at its max speed (approx 107 km/h for Francisco)?
+        - **IF YES:** Action: 'Maintain course and speed'
+        - **IF NO:** Action: 'Accelerate' (This is the command to reach max speed while on the perpendicular track).
+3.  **IF CONFLICT EXISTS (RISK OF COLLISION):**
+    - **First, analyze speed:** Can the conflict be resolved by adjusting speed *without turning*?
+    - **Check: Can I accelerate?** Look at the `TCPA` and `dist_km`. Is there *enough time and space* to accelerate and cross *in front of* the other vessel safely?
+        - **IF YES:** This is the preferred tactic.
+        - **Action: 'Accelerate'**
+    - **Check: Must I slow down?** If accelerating is not safe (threat is too close, TCPA is too low), will slowing down allow the vessel to pass safely ahead of you?
+        - **IF YES:** This is the second-best tactic.
+        - **Action: 'Reduce speed'**
+    - **Last Resort (Course Change):** If and ONLY if a speed adjustment is clearly insufficient or unsafe (e.g., risk is imminent, DCPA is near zero), then you must alter course.
+        - **Action: 'Alter course to starboard'** (preferred) or 'Pass astern'.
+**Decision Focus:** Respond ONLY with a JSON array containing ONE object for the crossing vessel.
+
+**Output Format Requirements:**
+JSON object must have keys: ""id"", ""situation"", ""role"", ""action"".
+1.  `""id""`: Integer ID.
+2.  `""situation""`: Brief description.
+3.  `""role""`: Role relative to immediate threat.
+4.  `""action""`: ONE of the exact phrases below:
+    - 'Alter course to starboard'
+    - 'Alter course to port'
+    - 'Reduce speed'
+    - 'Pass astern'
+    - 'Accelerate'
+    - 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 129216904710144, position: (400.0, 722.0) px, heading: 0.0°, speed: 54.5 km/h
+  Other vessels (Traffic):
+    - id: 129216973916304, pos: (103.1,480.0) px, heading: 90.0°, speed: 67.0 km/h, dist: 0.383 km, relBearing: 309.2° (TCPA: 16.0s, DCPA: 0.000km)
+    - id: 129216700675616, pos: (1016.9,320.0) px, heading: 270.0°, speed: 67.0 km/h, dist: 0.736 km, relBearing: 56.9° (TCPA: 30.5s, DCPA: 0.078km)","[
+    {
+        ""id"": 129216904710144,
+        ""situation"": ""Imminent collision with vessel crossing from starboard with TCPA 16.0s and DCPA 0.000km."",
+        ""role"": ""Give-way vessel"",
+        ""action"": ""Pass astern""
+    }
+]"
+7,39.68,Blue (ID: 129216904710144),"
+""You are a meticulous ship navigation AI following COLREGs Rule 10 (TSS) and Rules 13-17.
+Analyze the image, current data, and recent history for the **single crossing vessel** below.
+
+**OVERRIDING OBJECTIVE (Rule 10(c)):** Your primary goal is to maintain a heading as nearly as practicable at right angles (perpendicular, Target Heading: 0°/North or 180°/South) to the traffic flow. **Deviations from this heading are temporary and must be minimized.**
+
+**Recent History (Most recent first):**
+--- History Step T-1 ---
+Vessel States (T-1):
+  - id: 129216904710144, pos: ('400.0', '722.0'), heading: 0.0°, speed: 54.5 km/h
+  - id: 129216973916304, pos: ('103.1', '480.0'), heading: 90.0°, speed: 67.0 km/h
+  - id: 129216700675616, pos: ('1016.9', '320.0'), heading: 270.0°, speed: 67.0 km/h
+Decision Made (T-1):
+  - id: 129216904710144, situation: Imminent collision with vessel crossing from starboard with TCPA 16.0s and DCPA 0.000km., role: Give-way vessel, action: Pass astern
+
+---
+
+**Current Situation Analysis & Action Required:**
+
+**Action Strategy (Prioritizing Perpendicular Track):**
+Your task is to choose the *single best action* from the list below.
+1.  **Assess Risk:** Look at the 'Other vessels' data. Pay close attention to `dist_km` and `TCPA` (Time to Closest Point of Approach).
+2.  **IF PATH IS CLEAR (No conflict):**
+    - **Check Speed:** Is the vessel already at its max speed (approx 107 km/h for Francisco)?
+        - **IF YES:** Action: 'Maintain course and speed'
+        - **IF NO:** Action: 'Accelerate' (This is the command to reach max speed while on the perpendicular track).
+3.  **IF CONFLICT EXISTS (RISK OF COLLISION):**
+    - **First, analyze speed:** Can the conflict be resolved by adjusting speed *without turning*?
+    - **Check: Can I accelerate?** Look at the `TCPA` and `dist_km`. Is there *enough time and space* to accelerate and cross *in front of* the other vessel safely?
+        - **IF YES:** This is the preferred tactic.
+        - **Action: 'Accelerate'**
+    - **Check: Must I slow down?** If accelerating is not safe (threat is too close, TCPA is too low), will slowing down allow the vessel to pass safely ahead of you?
+        - **IF YES:** This is the second-best tactic.
+        - **Action: 'Reduce speed'**
+    - **Last Resort (Course Change):** If and ONLY if a speed adjustment is clearly insufficient or unsafe (e.g., risk is imminent, DCPA is near zero), then you must alter course.
+        - **Action: 'Alter course to starboard'** (preferred) or 'Pass astern'.
+**Decision Focus:** Respond ONLY with a JSON array containing ONE object for the crossing vessel.
+
+**Output Format Requirements:**
+JSON object must have keys: ""id"", ""situation"", ""role"", ""action"".
+1.  `""id""`: Integer ID.
+2.  `""situation""`: Brief description.
+3.  `""role""`: Role relative to immediate threat.
+4.  `""action""`: ONE of the exact phrases below:
+    - 'Alter course to starboard'
+    - 'Alter course to port'
+    - 'Reduce speed'
+    - 'Pass astern'
+    - 'Accelerate'
+    - 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 129216904710144, position: (422.0, 650.5) px, heading: 0.0°, speed: 7.4 km/h
+  Other vessels (Traffic):
+    - id: 129216909397648, pos: (-211.6,480.0) px, heading: 90.0°, speed: 67.0 km/h, dist: 0.656 km, relBearing: 285.1° (TCPA: 34.6s, DCPA: 0.100km)
+    - id: 129216656065408, pos: (-531.6,480.0) px, heading: 90.0°, speed: 67.0 km/h, dist: 0.969 km, relBearing: 280.1° (TCPA: 51.6s, DCPA: 0.065km)","[
+    {
+        ""id"": 129216904710144,
+        ""situation"": ""Imminent crossing with two vessels from port with TCPA 34.6s and 51.6s, DCPA 0.100km and 0.065km respectively."",
+        ""role"": ""Give-way vessel"",
+        ""action"": ""Accelerate""
+    }
+]"
+9,49.70,Blue (ID: 129216904710144),"
+""You are a meticulous ship navigation AI following COLREGs Rule 10 (TSS) and Rules 13-17.
+Analyze the image, current data, and recent history for the **single crossing vessel** below.
+
+**OVERRIDING OBJECTIVE (Rule 10(c)):** Your primary goal is to maintain a heading as nearly as practicable at right angles (perpendicular, Target Heading: 0°/North or 180°/South) to the traffic flow. **Deviations from this heading are temporary and must be minimized.**
+
+**Recent History (Most recent first):**
+--- History Step T-1 ---
+Vessel States (T-1):
+  - id: 129216904710144, pos: ('422.0', '650.5'), heading: 0.0°, speed: 7.4 km/h
+  - id: 129216909397648, pos: ('-211.6', '480.0'), heading: 90.0°, speed: 67.0 km/h
+  - id: 129216656065408, pos: ('-531.6', '480.0'), heading: 90.0°, speed: 67.0 km/h
+Decision Made (T-1):
+  - id: 129216904710144, situation: Imminent crossing with two vessels from port with TCPA 34.6s and 51.6s, DCPA 0.100km and 0.065km respectively., role: Give-way vessel, action: Accelerate
+
+--- History Step T-2 ---
+Vessel States (T-2):
+  - id: 129216904710144, pos: ('400.0', '722.0'), heading: 0.0°, speed: 54.5 km/h
+  - id: 129216973916304, pos: ('103.1', '480.0'), heading: 90.0°, speed: 67.0 km/h
+  - id: 129216700675616, pos: ('1016.9', '320.0'), heading: 270.0°, speed: 67.0 km/h
+Decision Made (T-2):
+  - id: 129216904710144, situation: Imminent collision with vessel crossing from starboard with TCPA 16.0s and DCPA 0.000km., role: Give-way vessel, action: Pass astern
+
+---
+
+**Current Situation Analysis & Action Required:**
+
+**Action Strategy (Prioritizing Perpendicular Track):**
+Your task is to choose the *single best action* from the list below.
+1.  **Assess Risk:** Look at the 'Other vessels' data. Pay close attention to `dist_km` and `TCPA` (Time to Closest Point of Approach).
+2.  **IF PATH IS CLEAR (No conflict):**
+    - **Check Speed:** Is the vessel already at its max speed (approx 107 km/h for Francisco)?
+        - **IF YES:** Action: 'Maintain course and speed'
+        - **IF NO:** Action: 'Accelerate' (This is the command to reach max speed while on the perpendicular track).
+3.  **IF CONFLICT EXISTS (RISK OF COLLISION):**
+    - **First, analyze speed:** Can the conflict be resolved by adjusting speed *without turning*?
+    - **Check: Can I accelerate?** Look at the `TCPA` and `dist_km`. Is there *enough time and space* to accelerate and cross *in front of* the other vessel safely?
+        - **IF YES:** This is the preferred tactic.
+        - **Action: 'Accelerate'**
+    - **Check: Must I slow down?** If accelerating is not safe (threat is too close, TCPA is too low), will slowing down allow the vessel to pass safely ahead of you?
+        - **IF YES:** This is the second-best tactic.
+        - **Action: 'Reduce speed'**
+    - **Last Resort (Course Change):** If and ONLY if a speed adjustment is clearly insufficient or unsafe (e.g., risk is imminent, DCPA is near zero), then you must alter course.
+        - **Action: 'Alter course to starboard'** (preferred) or 'Pass astern'.
+**Decision Focus:** Respond ONLY with a JSON array containing ONE object for the crossing vessel.
+
+**Output Format Requirements:**
+JSON object must have keys: ""id"", ""situation"", ""role"", ""action"".
+1.  `""id""`: Integer ID.
+2.  `""situation""`: Brief description.
+3.  `""role""`: Role relative to immediate threat.
+4.  `""action""`: ONE of the exact phrases below:
+    - 'Alter course to starboard'
+    - 'Alter course to port'
+    - 'Reduce speed'
+    - 'Pass astern'
+    - 'Accelerate'
+    - 'Maintain course and speed'
+
+--- Current Vessel Data ---""
+
+- id: 129216904710144, position: (422.0, 477.5) px, heading: 0.0°, speed: 116.7 km/h
+  Other vessels (Traffic):
+    - id: 129216904517904, pos: (505.0,320.0) px, heading: 270.0°, speed: 67.0 km/h, dist: 0.178 km, relBearing: 27.8° (TCPA: 4.8s, DCPA: 0.006km)","[
+    {
+        ""id"": 129216904710144,
+        ""situation"": ""Imminent collision with approaching vessel from port."",
+        ""role"": ""Give-way vessel"",
+        ""action"": ""Alter course to starboard""
+    }
+]"

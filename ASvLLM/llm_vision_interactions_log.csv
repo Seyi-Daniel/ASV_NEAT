@@ -1,0 +1,170 @@
+llm_call_id,simulation_time_s,prompt_text,llm_response_json
+1,5.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {136659401288896: 'Red', 136659418061744: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+2,10.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {136659401288896: 'Red', 136659418061744: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+3,15.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {136659401288896: 'Red', 136659418061744: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+4,20.03,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {136659401288896: 'Red', 136659418061744: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+1,5.00,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {135066728328192: 'Red', 135066656605392: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+2,10.02,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {135066728328192: 'Red', 135066656605392: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+3,15.03,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {135066728328192: 'Red', 135066656605392: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+1,5.00,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {140305770014400: 'Red', 140305770150080: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+2,10.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {140305770014400: 'Red', 140305770150080: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+3,15.03,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {140305770014400: 'Red', 140305770150080: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+1,5.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {128105411089168: 'Red', 128105349384528: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+2,10.02,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {128105411089168: 'Red', 128105349384528: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+3,15.02,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {128105411089168: 'Red', 128105349384528: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+1,5.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {137307710805472: 'Red', 137307710806768: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+2,10.02,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {137307710805472: 'Red', 137307710806768: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.",[]
+1,5.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {138013165653504: 'Red', 138013199444320: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+  {
+    ""id"": 138013165653504,
+    ""situation"": ""crossing"",
+    ""role"": ""give-way"",
+    ""action"": ""MAINTAIN_COURSE_SPEED""
+  },
+  {
+    ""id"": 138013199444320,
+    ""situation"": ""crossing"",
+    ""role"": ""stand-on"",
+    ""action"": ""MAINTAIN_COURSE_SPEED""
+  }
+]"
+2,10.03,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {138013165653504: 'Red', 138013199444320: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+    {
+        ""id"": 138013165653504,
+        ""situation"": ""Crossing"",
+        ""role"": ""Stand-on"",
+        ""action"": ""Maintain course and speed""
+    },
+    {
+        ""id"": 138013199444320,
+        ""situation"": ""Crossing"",
+        ""role"": ""Give-way"",
+        ""action"": ""Maneuver to avoid collision""
+    }
+]"
+3,15.04,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {138013165653504: 'Red', 138013199444320: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+  {
+    ""id"": 138013165653504,
+    ""situation"": ""Overtaking"",
+    ""role"": ""Stand-on"",
+    ""action"": ""MAINTAIN_COURSE_SPEED""
+  },
+  {
+    ""id"": 138013199444320,
+    ""situation"": ""Overtaking"",
+    ""role"": ""Give-way"",
+    ""action"": ""MAINTAIN_COURSE_SPEED""
+  }
+]"
+4,20.31,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {138013165653504: 'Red', 138013199444320: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+  {
+    ""id"": ""138013165653504"",
+    ""situation"": ""Crossing situation"",
+    ""role"": ""Give-way vessel"",
+    ""action"": ""Maneuver to starboard to avoid collision""
+  },
+  {
+    ""id"": ""138013199444320"", 
+    ""situation"": ""Crossing situation"",
+    ""role"": ""Stand-on vessel"",
+    ""action"": ""Maintain course and speed, but prepare for collision avoidance if necessary""
+  }
+]"
+1,5.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {123153457210640: 'Red', 123153511110784: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+  {
+    ""id"": 123153457210640,
+    ""situation"": ""Crossing"",
+    ""role"": ""Give-way"",
+    ""action"": ""Avoid crossing ahead of the blue vessel""
+  },
+  {
+    ""id"": 123153511110784,
+    ""situation"": ""Crossing"",
+    ""role"": ""Stand-on"", 
+    ""action"": ""Maintain course and speed""
+  }
+]"
+2,10.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {123153457210640: 'Red', 123153511110784: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+  {
+    ""id"": ""123153457210640"",
+    ""situation"": ""Crossing situation"",
+    ""role"": ""Give-way vessel"",
+    ""action"": ""Maneuver to avoid collision, likely by altering course to starboard to pass behind the other vessel""
+  },
+  {
+    ""id"": ""123153511110784"",
+    ""situation"": ""Crossing situation"",
+    ""role"": ""Stand-on vessel"", 
+    ""action"": ""Maintain course and speed unless collision cannot be avoided by actions of give-way vessel alone""
+  }
+]"
+3,15.70,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {123153457210640: 'Red', 123153511110784: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+  {
+    ""id"": 123153457210640,
+    ""situation"": ""CROSSING"",
+    ""role"": ""STAND-ON"",
+    ""action"": ""MAINTAIN COURSE AND SPEED""
+  },
+  {
+    ""id"": 123153511110784,
+    ""situation"": ""CROSSING"",
+    ""role"": ""GIVE-WAY"",
+    ""action"": ""ALTER COURSE TO STARBOARD""
+  }
+]"
+4,21.60,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {123153457210640: 'Red', 123153511110784: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+  {
+    ""id"": 123153457210640,
+    ""situation"": ""Overtaking"",
+    ""role"": ""Give-way vessel"",
+    ""action"": ""Keep out of the way of the blue vessel""
+  },
+  {
+    ""id"": 123153511110784,
+    ""situation"": ""Being Overtaken"",
+    ""role"": ""Stand-on vessel"",
+    ""action"": ""Maintain course and speed""
+  }
+]"
+1,5.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {129055179218080: 'Red', 129055243256224: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+  {
+    ""id"": ""129055179218080"",
+    ""situation"": ""Crossing situation"",
+    ""role"": ""Stand-on vessel"",
+    ""action"": ""MAINTAIN_COURSE_SPEED""
+  },
+  {
+    ""id"": ""129055243256224"",
+    ""situation"": ""Crossing situation"",
+    ""role"": ""Give-way vessel"",
+    ""action"": ""MAINTAIN_COURSE_SPEED""
+  }
+]"
+2,10.01,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {129055179218080: 'Red', 129055243256224: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+  {
+    ""id"": ""129055179218080"",
+    ""situation"": ""Crossing situation"",
+    ""role"": ""Give-way vessel"",
+    ""action"": ""MAINTAIN_COURSE_SPEED""
+  },
+  {
+    ""id"": ""129055243256224"",
+    ""situation"": ""Crossing situation"",
+    ""role"": ""Stand-on vessel"",
+    ""action"": ""MAINTAIN_COURSE_SPEED""
+  }
+]"
+3,15.03,"You are a ship navigation expert system applying COLREGs. Analyze the vessel positions and headings in this image. The vessels are identified by their colors: {129055179218080: 'Red', 129055243256224: 'Blue'}. The triangles point in the direction of the vessel's heading. Respond ONLY with a JSON array of objects: {id, situation, role, action}, one for each vessel ID provided. Do not include any additional text.","[
+  {
+    ""id"": 129055179218080,
+    ""situation"": ""Crossing situation"",
+    ""role"": ""Give-way vessel"",
+    ""action"": ""Alter course to starboard to pass behind the other vessel""
+  },
+  {
+    ""id"": 129055243256224,
+    ""situation"": ""Crossing situation"",
+    ""role"": ""Stand-on vessel"",
+    ""action"": ""Maintain course and speed""
+  }
+]"

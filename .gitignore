@@ -17,3 +17,5 @@ winners/
 *.gif
 *yml
 *.zip
+
+!lime_summary.json

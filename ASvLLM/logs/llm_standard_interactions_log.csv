@@ -1,0 +1,32 @@
+llm_call_id,simulation_time_s,involved_vessels,prompt_data,llm_response_json
+1,5.01,"Red(129940842224800), Blue(129939630032656)","
+        ""Ship navigation according to COLREGs.
+""
+        ""For each vessel listed below, determine the situation, role, action
+""
+        ""Respond ONLY with a JSON array of objects {id, situation, role, action}, **exactly one entry per vessel**. Do not produce more than one element for any given id
+
+""
+        "" Do not include any additional text.
+""
+        ""Vessels Data:""
+        
+- id: 129940842224800, position: (125.5, 500.0) px, heading: 90.0°, speed: 36.6 km/h
+  Other vessels:
+    - id: 129939630032656, pos: (874.5,500.0) px, heading: 270.0°, speed: 36.6 km/h, dist: 0.749 km, relBearing: 0.0°
+- id: 129939630032656, position: (874.5, 500.0) px, heading: 270.0°, speed: 36.6 km/h
+  Other vessels:
+    - id: 129940842224800, pos: (125.5,500.0) px, heading: 90.0°, speed: 36.6 km/h, dist: 0.749 km, relBearing: 0.0°","[
+    {
+        ""id"": 129940842224800,
+        ""situation"": ""head-on"",
+        ""role"": ""give-way"",
+        ""action"": ""alter course to starboard""
+    },
+    {
+        ""id"": 129939630032656,
+        ""situation"": ""head-on"",
+        ""role"": ""give-way"",
+        ""action"": ""alter course to starboard""
+    }
+]"
