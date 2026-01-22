@@ -292,6 +292,35 @@ shap_reports/
     └── explanation_animation.gif  # combined render + bar plot per step
 ```
 
+### LLM interpretation workflow
+
+You can generate step-by-step natural language interpretations by combining the
+LIME and SHAP summaries with an LLM. The helper script reads both
+`lime_summary.json` and `shap_summary.json`, builds a per-step prompt with the
+feature values and attributions, and stores the resulting explanations in a
+matching `llm_reports/` directory.
+
+```bash
+export LLM_API_KEY="your_provider_key"
+python asv_neat/scripts/llm_explain.py \
+  --lime-summary lime_reports/01_crossing/lime_summary.json \
+  --shap-summary shap_reports/01_crossing/shap_summary.json \
+  --output-dir llm_reports/01_crossing \
+  --model gpt-4o-mini \
+  --max-features 8 \
+  --max-steps 50
+```
+
+The script writes a `llm_summary.json` file plus one JSON file per step:
+
+```
+llm_reports/
+└── 01_crossing/
+    ├── llm_step_000.json
+    ├── llm_step_001.json
+    └── llm_summary.json
+```
+
 ### Building a combined LIME+SHAP animation
 
 After running the individual LIME and SHAP explainers you can stitch their
