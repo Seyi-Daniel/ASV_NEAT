@@ -298,7 +298,9 @@ You can generate step-by-step natural language interpretations by combining the
 LIME and SHAP summaries with an LLM. The helper script reads both
 `lime_summary.json` and `shap_summary.json`, builds a per-step prompt with the
 feature values and attributions, and stores the resulting explanations in a
-matching `llm_reports/` directory.
+matching `llm_reports/` directory. The default system prompt enforces a strict
+JSON-only response: one object per step with the feature attributions, linked
+COLREGs rule(s), and a succinct justification.
 
 ```bash
 export LLM_API_KEY="your_provider_key"
@@ -306,9 +308,28 @@ python asv_neat/scripts/llm_explain.py \
   --lime-summary lime_reports/01_crossing/lime_summary.json \
   --shap-summary shap_reports/01_crossing/shap_summary.json \
   --output-dir llm_reports/01_crossing \
+  --metadata-file captured_episodes/01_crossing/metadata.json \
+  --frames-dir captured_episodes/01_crossing/frames \
   --model gpt-4o-mini \
   --max-features 8 \
   --max-steps 50
+```
+
+To give the LLM additional simulation context (vessel dimensions, speeds,
+rudder limits, etc.), include the default hyperparameters in the prompt and
+optionally override any values with `--hp` so they match the run that generated
+the traces:
+
+```bash
+python asv_neat/scripts/llm_explain.py \
+  --lime-summary lime_reports/01_crossing/lime_summary.json \
+  --shap-summary shap_reports/01_crossing/shap_summary.json \
+  --output-dir llm_reports/01_crossing \
+  --metadata-file captured_episodes/01_crossing/metadata.json \
+  --frames-dir captured_episodes/01_crossing/frames \
+  --include-hyperparameters \
+  --hp boat_max_speed=6.5 \
+  --hp rudder_max_angle_deg=30
 ```
 
 The script writes a `llm_summary.json` file plus one JSON file per step:
