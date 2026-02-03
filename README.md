@@ -381,6 +381,49 @@ of distorting images.
 
 ---
 
+## LLM control verification
+
+To validate whether the NEAT controller’s per-step outputs look reasonable, you
+can re-query a language model with the same normalized input features stored in
+the LIME/SHAP summary JSON files. The `llm_verify_controls.py` script sends the
+feature values to an OpenAI-compatible endpoint and compares the LLM’s returned
+rudder/throttle against the model’s original output.
+
+### Prerequisites
+
+* A LIME or SHAP summary JSON file (e.g., `lime_summary.json`).
+* An OpenAI-compatible API endpoint and API key (defaults use
+  `LLM_API_URL`/`LLM_API_KEY`).
+
+### Example usage
+
+```bash
+export LLM_API_KEY="your-key-here"
+python asv_neat/scripts/llm_verify_controls.py \
+  --summary lime_summary.json \
+  --output llm_control_verification.json \
+  --model gpt-4o-mini \
+  --rudder-tolerance 0.1 \
+  --max-steps 50
+```
+
+### Output format
+
+The script writes a JSON report with an overall summary and a per-step record:
+
+* `summary` — includes the source summary path, model name, total steps,
+  matched steps, match rate, and the rudder tolerance used.
+* `steps` — for each step, includes the input features, the original model
+  outputs, the LLM outputs (plus raw response), and a comparison block with
+  rudder/throttle match flags.
+
+If you want to limit the verification window, use `--start-step` / `--end-step`
+or `--max-steps`. To tune the matching threshold for rudder outputs, adjust
+`--rudder-tolerance`. The script still writes a structured report even when an
+LLM call fails (the `error` field will be populated).
+
+---
+
 ## Cost function overview
 
 The minimisation objective combines several components:
