@@ -6,13 +6,21 @@ import argparse
 import json
 import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from asv_neat import HyperParameters  # noqa: E402
+from asv_neat.env import CrossingScenarioEnv  # noqa: E402
+from asv_neat.neat_training import observation_vector  # noqa: E402
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are an expert autonomous surface vessel controller. "
@@ -23,6 +31,21 @@ DEFAULT_SYSTEM_PROMPT = (
     "Respond ONLY with a JSON object: {\"rudder_cmd\": <float>, \"throttle\": <int>, "
     "\"reason\": <short string>} and no extra text."
 )
+
+FEATURE_NAMES: List[str] = [
+    "x_goal_TV",
+    "y_goal_TV",
+    "speed_TV",
+    "heading_TV",
+    "x_TV",
+    "y_TV",
+    "x_goal_ASV",
+    "y_goal_ASV",
+    "speed_ASV",
+    "heading_ASV",
+    "x_ASV",
+    "y_ASV",
+]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -133,6 +156,120 @@ def _extract_features(step: Dict[str, Any]) -> Dict[str, float]:
     return features
 
 
+def _denormalise(value: float, scale: float) -> float:
+    if scale <= 0.0:
+        return value
+    return value * scale
+
+
+def _has_prefix_features(features: Dict[str, float], prefix: str) -> bool:
+    keys = (f"x_{prefix}", f"y_{prefix}", f"heading_{prefix}", f"speed_{prefix}")
+    return any(key in features for key in keys)
+
+
+def _state_from_features(
+    features: Dict[str, float],
+    prefix: str,
+    params: HyperParameters,
+) -> Dict[str, float]:
+    pos_scale = params.feature_position_scale
+    speed_scale = params.feature_speed_scale
+    heading_scale = params.feature_heading_scale
+
+    x_val = float(features.get(f"x_{prefix}", 0.0))
+    y_val = float(features.get(f"y_{prefix}", 0.0))
+    heading_val = float(features.get(f"heading_{prefix}", 0.0))
+    speed_val = float(features.get(f"speed_{prefix}", 0.0))
+    goal_x_val = float(features.get(f"x_goal_{prefix}", x_val))
+    goal_y_val = float(features.get(f"y_goal_{prefix}", y_val))
+
+    return {
+        "x": _denormalise(x_val, pos_scale),
+        "y": _denormalise(y_val, pos_scale),
+        "heading": _denormalise(heading_val, heading_scale),
+        "speed": _denormalise(speed_val, speed_scale),
+        "goal_x": _denormalise(goal_x_val, pos_scale),
+        "goal_y": _denormalise(goal_y_val, pos_scale),
+    }
+
+
+def _features_from_vector(values: Sequence[float]) -> Dict[str, float]:
+    return {
+        name: float(values[idx])
+        for idx, name in enumerate(FEATURE_NAMES)
+        if idx < len(values)
+    }
+
+
+def _initialise_env(
+    features: Dict[str, float], params: HyperParameters
+) -> Optional[CrossingScenarioEnv]:
+    if not _has_prefix_features(features, "ASV"):
+        return None
+
+    env = CrossingScenarioEnv()
+    agent_state = _state_from_features(features, "ASV", params)
+    if _has_prefix_features(features, "TV"):
+        stand_on_state = _state_from_features(features, "TV", params)
+        states = [agent_state, stand_on_state]
+    else:
+        states = [agent_state]
+    env.reset_from_states(states, meta=None)
+    return env
+
+
+def _advance_simulation(
+    env: CrossingScenarioEnv,
+    params: HyperParameters,
+    action: Tuple[float, int],
+) -> Optional[Dict[str, float]]:
+    actions: List[Optional[Tuple[float, int]]] = [action]
+    if len(env.ships) > 1:
+        actions.extend([None] * (len(env.ships) - 1))
+    env.step(actions)
+
+    snapshot = env.snapshot()
+    if not snapshot:
+        return None
+    agent_state = snapshot[0]
+    stand_on_state = snapshot[1] if len(snapshot) > 1 else snapshot[0]
+    features = observation_vector(agent_state, stand_on_state, params)
+    return _features_from_vector(features)
+
+
+def _build_prompt(
+    step_id: int,
+    features: Dict[str, float],
+    previous_llm: Optional[Dict[str, Any]],
+    previous_sim_features: Optional[Dict[str, float]],
+) -> str:
+    features_json = json.dumps(features, indent=2, sort_keys=True)
+    if previous_llm is None and previous_sim_features is None:
+        history_block = (
+            "Prior step context:\n"
+            "- No previous LLM output or simulated features available (first step).\n"
+        )
+    else:
+        history_lines = []
+        if previous_llm is not None:
+            previous_llm_json = json.dumps(previous_llm, indent=2, sort_keys=True)
+            history_lines.append(f"Prior step LLM output:\n{previous_llm_json}")
+        if previous_sim_features is not None:
+            previous_sim_json = json.dumps(previous_sim_features, indent=2, sort_keys=True)
+            history_lines.append(
+                "Features after applying the prior LLM output in the simulator:\n"
+                f"{previous_sim_json}"
+            )
+        history_block = "\n\n".join(history_lines) + "\n"
+    return (
+        "Given the following normalized input features from a single NEAT controller step, "
+        "infer the rudder command and throttle action.\n\n"
+        f"Step: {step_id}\n\n"
+        f"Input features (feature: value):\n{features_json}\n\n"
+        f"{history_block}"
+    )
+
+
 def _select_steps(
     data: List[Dict[str, Any]],
     *,
@@ -210,16 +347,6 @@ def _extract_json_object(raw: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _build_prompt(step_id: int, features: Dict[str, float]) -> str:
-    features_json = json.dumps(features, indent=2, sort_keys=True)
-    return (
-        "Given the following normalized input features from a single NEAT controller step, "
-        "infer the rudder command and throttle action.\n\n"
-        f"Step: {step_id}\n\n"
-        f"Input features (feature: value):\n{features_json}"
-    )
-
-
 def verify_controls(
     *,
     summary_path: Path,
@@ -242,12 +369,19 @@ def verify_controls(
         end_step=end_step,
         max_steps=max_steps,
     )
+    params = HyperParameters()
+    env: Optional[CrossingScenarioEnv] = None
+    previous_llm: Optional[Dict[str, Any]] = None
+    previous_sim_features: Optional[Dict[str, float]] = None
+    if steps:
+        first_features = _extract_features(steps[0])
+        env = _initialise_env(first_features, params)
     results = []
     matched = 0
     for item in steps:
         step_id = int(item.get("step", -1))
         features = _extract_features(item)
-        prompt = _build_prompt(step_id, features)
+        prompt = _build_prompt(step_id, features, previous_llm, previous_sim_features)
         llm_raw = None
         llm_payload = None
         error = None
@@ -282,6 +416,14 @@ def verify_controls(
                 llm_throttle = None
             llm_reason = llm_payload.get("reason")
 
+        simulated_next_features = None
+        if env is not None and llm_rudder is not None and llm_throttle is not None:
+            simulated_next_features = _advance_simulation(
+                env,
+                params,
+                (float(llm_rudder), int(llm_throttle)),
+            )
+
         rudder_diff = None
         rudder_match = False
         if llm_rudder is not None:
@@ -308,6 +450,13 @@ def verify_controls(
                     "reason": llm_reason,
                     "raw_response": llm_raw,
                 },
+                "llm_context": {
+                    "previous_llm": previous_llm,
+                    "previous_simulated_features": previous_sim_features,
+                },
+                "simulation": {
+                    "next_features": simulated_next_features,
+                },
                 "comparison": {
                     "rudder_diff": rudder_diff,
                     "rudder_within_tolerance": rudder_match,
@@ -317,6 +466,15 @@ def verify_controls(
                 "error": error,
             }
         )
+        if llm_rudder is not None and llm_throttle is not None:
+            previous_llm = {
+                "rudder_cmd": llm_rudder,
+                "throttle": llm_throttle,
+                "reason": llm_reason,
+            }
+        else:
+            previous_llm = None
+        previous_sim_features = simulated_next_features
         if sleep_seconds:
             time.sleep(sleep_seconds)
 
