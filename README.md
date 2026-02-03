@@ -422,6 +422,25 @@ or `--max-steps`. To tune the matching threshold for rudder outputs, adjust
 `--rudder-tolerance`. The script still writes a structured report even when an
 LLM call fails (the `error` field will be populated).
 
+### Visualising LLM verification replays
+
+To compare the original model trajectory against the LLM-driven “shadow”
+trajectory, use the verification replay demo. The script reads the
+`llm_control_verification.json` output and replays both vessels in a single
+render window so their positions and commands can be visually compared.
+
+```bash
+python asv_neat/scripts/demo_llm_verification.py \
+  --verification llm_control_verification.json \
+  --render \
+  --step-delay 0.05
+```
+
+Use `--start-step`, `--end-step`, or `--max-steps` to restrict the replay range.
+When rendering, the model vessel is labelled “Model ASV” and the LLM vessel is
+labelled “LLM Shadow”. If the verification file includes target-vessel features,
+the target is shown alongside both trajectories.
+
 ---
 
 ## Cost function overview
