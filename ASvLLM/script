@@ -1,0 +1,1 @@
+python runner.py --scenario multi2 --runs 10 --outdir experiments/claude_experiments/detailed

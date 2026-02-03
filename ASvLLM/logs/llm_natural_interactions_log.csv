@@ -1,0 +1,56 @@
+llm_call_id,simulation_time_s,involved_vessels,prompt_data,llm_response_json
+1,5.00,"Red(140238327304064), Blue(140238316490672)","
+""You are a ship navigation expert system following COLREGs.
+Analyze the provided image and the **current situation summary** below.
+Also consider the **recent history** of the situation and decisions made.
+
+
+**Current Situation Analysis & Action Required:**
+
+**Analysis Instructions (COLREGs Rules):**
+1.  **Overtaking (Rule 13):** Occurs when a vessel approaches from **more than 22.5° abaft the beam** (starboard/port quarter). The overtaking vessel is *always* the **Give-way** vessel and must keep clear.
+2.  **Head-on (Rule 14):** Occurs when two vessels are on reciprocal or nearly reciprocal courses, seeing each other **dead ahead** (approx 0° relative). Both are **Give-way** and must alter course to starboard.
+3.  **Crossing (Rule 15):** Occurs when a vessel approaches from the **starboard side** (starboard bow/beam, 5° to 112.5°). The vessel with the other on its own starboard side is the **Give-way** vessel.
+4.  **Roles:** - **Give-way:** Must take early and substantial action to keep well clear (usually 'Alter course to starboard').
+    - **Stand-on:** Must maintain course and speed, unless collision is imminent.
+
+**Current Situation Summary:**
+Vessel (ID: 140238327304064) is heading East (90.0°) at 36.5 km/h.
+Nearby vessels:
+  - Vessel (ID: 140238316490672) is 0.749 km away, and is APPROACHING from dead ahead (0.0°).
+    WARNING: Risk of collision detected. TCPA: 36.9s, DCPA: 0.000km.
+Vessel (ID: 140238316490672) is heading West (270.0°) at 36.5 km/h.
+Nearby vessels:
+  - Vessel (ID: 140238327304064) is 0.749 km away, and is APPROACHING from dead ahead (0.0°).
+    WARNING: Risk of collision detected. TCPA: 36.9s, DCPA: 0.000km.
+
+---
+**Task:**
+Based on the image and the summary above, provide a JSON response for **each 'Vessel (ID: ...)'** listed (not the 'Nearby vessels').
+
+**Output Format Requirements:**
+JSON object must have keys: ""id"", ""situation"", ""role"", ""action"".
+1.  `""id""`: Integer ID.
+2.  `""situation""`: Brief description (e.g., ""Overtaking"", ""Crossing threat on starboard bow"").
+3.  `""role""`: Role relative to immediate threat (e.g., ""Give-way"", ""Stand-on"").
+4.  `""action""`: ONE of the exact phrases below:
+    - 'Alter course to starboard'
+    - 'Alter course to port'
+    - 'Reduce speed'
+    - 'Pass astern'
+    - 'Accelerate'
+    - 'Maintain course and speed'
+","[
+    {
+        ""id"": 140238327304064,
+        ""situation"": ""Head-on"",
+        ""role"": ""Give-way"",
+        ""action"": ""Alter course to starboard""
+    },
+    {
+        ""id"": 140238316490672,
+        ""situation"": ""Head-on"",
+        ""role"": ""Give-way"",
+        ""action"": ""Alter course to starboard""
+    }
+]"

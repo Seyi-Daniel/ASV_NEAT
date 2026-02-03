@@ -292,6 +292,56 @@ shap_reports/
     └── explanation_animation.gif  # combined render + bar plot per step
 ```
 
+### LLM interpretation workflow
+
+You can generate step-by-step natural language interpretations by combining the
+LIME and SHAP summaries with an LLM. The helper script reads both
+`lime_summary.json` and `shap_summary.json`, builds a per-step prompt with the
+feature values and attributions, and stores the resulting explanations in a
+matching `llm_reports/` directory. The default system prompt enforces a strict
+JSON-only response: one object per step with the feature attributions, linked
+COLREGs rule(s), and a succinct justification.
+
+```bash
+export LLM_API_KEY="your_provider_key"
+python asv_neat/scripts/llm_explain.py \
+  --lime-summary lime_reports/01_crossing/lime_summary.json \
+  --shap-summary shap_reports/01_crossing/shap_summary.json \
+  --output-dir llm_reports/01_crossing \
+  --metadata-file captured_episodes/01_crossing/metadata.json \
+  --frames-dir captured_episodes/01_crossing/frames \
+  --model gpt-4o-mini \
+  --max-features 8 \
+  --max-steps 50
+```
+
+To give the LLM additional simulation context (vessel dimensions, speeds,
+rudder limits, etc.), include the default hyperparameters in the prompt and
+optionally override any values with `--hp` so they match the run that generated
+the traces:
+
+```bash
+python asv_neat/scripts/llm_explain.py \
+  --lime-summary lime_reports/01_crossing/lime_summary.json \
+  --shap-summary shap_reports/01_crossing/shap_summary.json \
+  --output-dir llm_reports/01_crossing \
+  --metadata-file captured_episodes/01_crossing/metadata.json \
+  --frames-dir captured_episodes/01_crossing/frames \
+  --include-hyperparameters \
+  --hp boat_max_speed=6.5 \
+  --hp rudder_max_angle_deg=30
+```
+
+The script writes a `llm_summary.json` file plus one JSON file per step:
+
+```
+llm_reports/
+└── 01_crossing/
+    ├── llm_step_000.json
+    ├── llm_step_001.json
+    └── llm_summary.json
+```
+
 ### Building a combined LIME+SHAP animation
 
 After running the individual LIME and SHAP explainers you can stitch their
@@ -328,6 +378,49 @@ height-matched 2×2 grid of plots on the right (LIME/SHAP rudder on the top row,
 LIME/SHAP throttle on the bottom row). The script normalises plot heights so the
 stack matches the scene, padding with whitespace to preserve readability instead
 of distorting images.
+
+---
+
+## LLM control verification
+
+To validate whether the NEAT controller’s per-step outputs look reasonable, you
+can re-query a language model with the same normalized input features stored in
+the LIME/SHAP summary JSON files. The `llm_verify_controls.py` script sends the
+feature values to an OpenAI-compatible endpoint and compares the LLM’s returned
+rudder/throttle against the model’s original output.
+
+### Prerequisites
+
+* A LIME or SHAP summary JSON file (e.g., `lime_summary.json`).
+* An OpenAI-compatible API endpoint and API key (defaults use
+  `LLM_API_URL`/`LLM_API_KEY`).
+
+### Example usage
+
+```bash
+export LLM_API_KEY="your-key-here"
+python asv_neat/scripts/llm_verify_controls.py \
+  --summary lime_summary.json \
+  --output llm_control_verification.json \
+  --model gpt-4o-mini \
+  --rudder-tolerance 0.1 \
+  --max-steps 50
+```
+
+### Output format
+
+The script writes a JSON report with an overall summary and a per-step record:
+
+* `summary` — includes the source summary path, model name, total steps,
+  matched steps, match rate, and the rudder tolerance used.
+* `steps` — for each step, includes the input features, the original model
+  outputs, the LLM outputs (plus raw response), and a comparison block with
+  rudder/throttle match flags.
+
+If you want to limit the verification window, use `--start-step` / `--end-step`
+or `--max-steps`. To tune the matching threshold for rudder outputs, adjust
+`--rudder-tolerance`. The script still writes a structured report even when an
+LLM call fails (the `error` field will be populated).
 
 ---
 
