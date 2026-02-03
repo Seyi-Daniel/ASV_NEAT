@@ -21,8 +21,10 @@ class Boat:
         kin: BoatParams,
         rudder_cfg: RudderParams,
         goal: Optional[Tuple[float, float]] = None,
+        name: Optional[str] = None,
     ) -> None:
         self.id = boat_id
+        self.name = name
         self.x = float(x)
         self.y = float(y)
         self.h = float(heading)
@@ -50,6 +52,7 @@ class Boat:
 
         return {
             "id": self.id,
+            "name": self.name,
             "x": self.x,
             "y": self.y,
             "heading": self.h,

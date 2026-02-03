@@ -118,6 +118,7 @@ class CrossingScenarioEnv:
                 kin=self.kin,
                 rudder_cfg=self.rudder_cfg,
                 goal=goal,
+                name=spec.get("name"),
             )
             self.ships.append(boat)
 
@@ -329,7 +330,7 @@ class CrossingScenarioEnv:
                     direction="forward",
                 )
         if self._font:
-            name = "ASV" if boat.id == 0 else "Target Vessel"
+            name = boat.name or ("ASV" if boat.id == 0 else "Target Vessel")
             label = self._font.render(name, True, (255, 255, 255))
             surf.blit(label, (self.sx(boat.x) + 8, self.sy(boat.y) - 8))
 
