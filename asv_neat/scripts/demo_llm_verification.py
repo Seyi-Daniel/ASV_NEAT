@@ -14,13 +14,22 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from asv_neat import HyperParameters  # noqa: E402
+from asv_neat import (  # noqa: E402
+    HyperParameters,
+    ScenarioKind,
+    apply_cli_overrides,
+    build_scenarios,
+    scenario_states_for_env,
+)
 from asv_neat.cli_helpers import (  # noqa: E402
     build_boat_params,
     build_env_config,
     build_rudder_config,
+    build_scenario_request,
 )
 from asv_neat.env import CrossingScenarioEnv, HAS_PYGAME  # noqa: E402
+
+SCENARIO_KIND_CHOICES = ("auto", "crossing", "head_on", "overtaking")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -35,6 +44,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "--render",
         action="store_true",
         help="Enable pygame visualisation.",
+    )
+    parser.add_argument(
+        "--scenario-kind",
+        choices=SCENARIO_KIND_CHOICES,
+        default="auto",
+        help="Select a deterministic encounter kind (default: auto from features).",
+    )
+    parser.add_argument(
+        "--scenario-index",
+        type=int,
+        default=None,
+        help="1-based index for the selected encounter kind.",
     )
     parser.add_argument(
         "--step-delay",
@@ -59,6 +80,13 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Maximum number of steps to replay.",
+    )
+    parser.add_argument(
+        "--hp",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="Override hyperparameters to mirror the training run (repeatable).",
     )
     return parser
 
@@ -181,6 +209,10 @@ def main() -> None:
         raise SystemExit("pygame is required for rendering but is not installed.")
 
     params = HyperParameters()
+    try:
+        apply_cli_overrides(params, args.hp)
+    except (KeyError, ValueError) as exc:
+        raise SystemExit(str(exc))
     boat_params = build_boat_params(params)
     rudder_cfg = build_rudder_config(params)
     env_cfg = build_env_config(params, render=args.render)
@@ -192,21 +224,49 @@ def main() -> None:
     llm_sequence = _build_llm_feature_sequence(steps)
     llm_features = llm_sequence[0] if llm_sequence else model_features
 
-    model_state = _state_from_features(model_features, "ASV", params)
-    llm_state = _state_from_features(llm_features, "ASV", params)
-    model_state["name"] = "Model ASV"
-    llm_state["name"] = "LLM Shadow"
-    states = [model_state, llm_state]
+    states: List[Dict[str, float]]
+    meta: Optional[dict] = None
+    if args.scenario_kind != "auto":
+        if args.scenario_index is None:
+            raise SystemExit("--scenario-index is required when --scenario-kind is set.")
+        scenario_request = build_scenario_request(params)
+        scenarios = build_scenarios(scenario_request)
+        selected_kind = ScenarioKind(args.scenario_kind)
+        scenarios = [sc for sc in scenarios if sc.kind is selected_kind]
+        if not scenarios:
+            raise SystemExit("No scenarios available for the selected encounter kind.")
+        if args.scenario_index < 1 or args.scenario_index > len(scenarios):
+            raise SystemExit(
+                f"Scenario index must be between 1 and {len(scenarios)} for {args.scenario_kind}."
+            )
+        selected_scenario = scenarios[args.scenario_index - 1]
+        env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, rudder_cfg=rudder_cfg)
+        base_states, meta = scenario_states_for_env(env, selected_scenario)
+        model_state = dict(base_states[0])
+        llm_state = dict(base_states[0])
+        model_state["name"] = "Model ASV"
+        llm_state["name"] = "LLM Shadow"
+        states = [model_state, llm_state]
+        if len(base_states) > 1:
+            tv_state = dict(base_states[1])
+            tv_state["name"] = "Target Vessel"
+            states.append(tv_state)
+    else:
+        model_state = _state_from_features(model_features, "ASV", params)
+        llm_state = _state_from_features(llm_features, "ASV", params)
+        model_state["name"] = "Model ASV"
+        llm_state["name"] = "LLM Shadow"
+        states = [model_state, llm_state]
 
-    has_target = _has_prefix_features(model_features, "TV")
-    if has_target:
-        tv_state = _state_from_features(model_features, "TV", params)
-        tv_state["name"] = "Target Vessel"
-        states.append(tv_state)
+        has_target = _has_prefix_features(model_features, "TV")
+        if has_target:
+            tv_state = _state_from_features(model_features, "TV", params)
+            tv_state["name"] = "Target Vessel"
+            states.append(tv_state)
 
-    env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, rudder_cfg=rudder_cfg)
+        env = CrossingScenarioEnv(cfg=env_cfg, kin=boat_params, rudder_cfg=rudder_cfg)
     try:
-        env.reset_from_states(states, meta=None)
+        env.reset_from_states(states, meta=meta)
 
         for idx, item in enumerate(steps):
             step_id = int(item.get("step", idx))
@@ -222,7 +282,7 @@ def main() -> None:
             _apply_state(env.ships[0], model_state)
             _apply_state(env.ships[1], llm_state)
 
-            if has_target and len(env.ships) > 2:
+            if len(env.ships) > 2:
                 tv_state = _state_from_features(model_features, "TV", params)
                 _apply_state(env.ships[2], tv_state)
 
@@ -235,7 +295,7 @@ def main() -> None:
             env.ships[0].last_thr = int(model_thr or 0)
             env.ships[1].last_rudder_cmd = float(llm_rudder or 0.0)
             env.ships[1].last_thr = int(llm_thr or 0)
-            if has_target and len(env.ships) > 2:
+            if len(env.ships) > 2:
                 env.ships[2].last_rudder_cmd = 0.0
                 env.ships[2].last_thr = 0
 
