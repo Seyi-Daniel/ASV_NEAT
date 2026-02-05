@@ -401,6 +401,23 @@ Each `sensitivity_summary.json` contains per-step baseline features/outputs and
 per-feature perturbation rows for both explainers, including directional
 changes (+/-) and output deltas so the influence can be compared directly.
 
+To make this report easier to review in spreadsheet form, convert it into a
+flat table (CSV and optional XLSX with merged grouping cells) using:
+
+```bash
+python asv_neat/scripts/sensitivity_table.py \
+  --input sensitivity_reports/01_crossing/sensitivity_summary.json
+```
+
+This creates:
+
+* `sensitivity_summary_table.csv` (portable table output), and
+* `sensitivity_summary_table.xlsx` (grouped/merged cells for repeated `Step`,
+  `Explanation`, `Output Channel`, and `Feature`, with centered alignment and
+  borders for readability).
+
+If you only need CSV, add `--skip-xlsx`.
+
 ### Building a combined LIME+SHAP animation
 
 After running the individual LIME and SHAP explainers you can stitch their
