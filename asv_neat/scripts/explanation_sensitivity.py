@@ -153,21 +153,47 @@ def _attrib_value(item: dict) -> float:
     return 0.0
 
 
-def _top_features(step_output: dict, top_k: int) -> List[dict]:
+def _top_features(
+    step_output: dict,
+    top_k: int,
+    feature_values: Dict[str, float],
+) -> List[dict]:
     attributions = step_output.get("feature_attributions", [])
     ordered = sorted(attributions, key=lambda x: abs(_attrib_value(x)), reverse=True)
     top_features = []
     for rank, item in enumerate(ordered[:top_k], start=1):
+        feature_name = item["feature"]
         top_features.append(
             {
                 "rank": rank,
-                "feature": item["feature"],
+                "feature": feature_name,
                 "attribution": _attrib_value(item),
                 "attribution_abs": abs(_attrib_value(item)),
-                "baseline_feature_value": float(item.get("value", 0.0)),
+                "baseline_feature_value": float(feature_values[feature_name]),
             }
         )
     return top_features
+
+
+def _extract_feature_values(*step_payloads: dict) -> Dict[str, float]:
+    feature_values: Dict[str, float] = {}
+    for payload in step_payloads:
+        for output_name in ("rudder", "throttle"):
+            attrs = payload.get(output_name, {}).get("feature_attributions", [])
+            for item in attrs:
+                feature = item.get("feature")
+                if feature is None:
+                    continue
+                if feature not in feature_values:
+                    feature_values[feature] = float(item.get("value", 0.0))
+    missing = [name for name in FEATURE_NAMES if name not in feature_values]
+    if missing:
+        missing_str = ", ".join(missing)
+        raise RuntimeError(
+            "Unable to recover a full feature vector from summary JSON. Missing: "
+            f"{missing_str}"
+        )
+    return feature_values
 
 
 def _run_perturbations(
@@ -231,23 +257,19 @@ def _build_step_report(
     top_k: int,
     percentages: Iterable[float],
 ) -> dict:
-    step_features = []
-    for output_name in ("rudder", "throttle"):
-        attrs = lime_step.get(output_name, {}).get("feature_attributions", [])
-        if attrs:
-            step_features = [float(item.get("value", 0.0)) for item in attrs]
-            break
-    if not step_features:
-        raise RuntimeError(f"Step {step}: unable to recover feature vector from summary JSON.")
-
-    baseline_vec = np.asarray(step_features, dtype=float)
+    feature_values = _extract_feature_values(lime_step, shap_step)
+    baseline_vec = np.asarray([feature_values[name] for name in FEATURE_NAMES], dtype=float)
     baseline_outputs = _network_outputs(network, baseline_vec)
 
     explainers = {}
     for explainer_name, step_payload in (("lime", lime_step), ("shap", shap_step)):
         outputs = {}
         for output_name in ("rudder", "throttle"):
-            top_features = _top_features(step_payload[output_name], top_k)
+            top_features = _top_features(
+                step_payload[output_name],
+                top_k,
+                feature_values,
+            )
             sensitivity_rows = []
             for feature_item in top_features:
                 sensitivity_rows.append(
