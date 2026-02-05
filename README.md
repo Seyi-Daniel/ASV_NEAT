@@ -414,7 +414,8 @@ This creates:
 * `sensitivity_summary_table.csv` (portable table output), and
 * `sensitivity_summary_table.xlsx` (grouped/merged cells for repeated `Step`,
   `Explanation`, `Output Channel`, and `Feature`, with centered alignment and
-  borders for readability).
+  borders for readability), including both `Label Change` and `New Label`
+  columns so changed outputs are explicit.
 
 If you only need CSV, add `--skip-xlsx`.
 

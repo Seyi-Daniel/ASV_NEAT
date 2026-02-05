@@ -21,6 +21,7 @@ TABLE_COLUMNS = [
     "Difference",
     "Original Label",
     "Label Change",
+    "New Label",
 ]
 
 
@@ -95,12 +96,14 @@ def _flatten_rows(payload: dict[str, Any]) -> list[dict[str, str]]:
                             diff = float(deltas["rudder_delta"])
                             original_label = str(baseline_outputs["helm_label"])
                             label_changed = bool(deltas["helm_label_changed"])
+                            new_label = str(outputs["helm_label"])
                         else:
                             original_output = float(baseline_outputs["throttle_raw"])
                             new_output = float(outputs["throttle_raw"])
                             diff = float(deltas["throttle_raw_delta"])
                             original_label = str(baseline_outputs["throttle_label"])
                             label_changed = bool(deltas["throttle_label_changed"])
+                            new_label = str(outputs["throttle_label"])
 
                         rows.append(
                             {
@@ -115,6 +118,7 @@ def _flatten_rows(payload: dict[str, Any]) -> list[dict[str, str]]:
                                 "Difference": _format_float(diff),
                                 "Original Label": original_label,
                                 "Label Change": "Yes" if label_changed else "No",
+                                "New Label": new_label,
                             }
                         )
     return rows
