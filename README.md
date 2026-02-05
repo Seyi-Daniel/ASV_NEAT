@@ -422,6 +422,43 @@ or `--max-steps`. To tune the matching threshold for rudder outputs, adjust
 `--rudder-tolerance`. The script still writes a structured report even when an
 LLM call fails (the `error` field will be populated).
 
+### Visualising LLM verification replays
+
+To compare the original model trajectory against the LLM-driven “shadow”
+trajectory, use the verification replay demo. The script reads the
+`llm_control_verification.json` output and replays both vessels in a single
+render window so their positions and commands can be visually compared.
+
+```bash
+python asv_neat/scripts/demo_llm_verification.py \
+  --verification llm_control_verification.json \
+  --render \
+  --step-delay 0.05
+```
+
+Use `--start-step`, `--end-step`, or `--max-steps` to restrict the replay range.
+When rendering, the model vessel is labelled “Model ASV” and the LLM vessel is
+labelled “LLM Shadow”. If the verification file includes target-vessel features,
+the target is shown alongside both trajectories.
+
+To mirror the deterministic training setups (15 total scenarios across the three
+encounter types), pass the scenario kind and 1-based index along with any
+hyperparameter overrides that were used during training:
+
+```bash
+python asv_neat/scripts/demo_llm_verification.py \
+  --verification llm_control_verification.json \
+  --scenario-kind crossing \
+  --scenario-index 1 \
+  --hp env_dt=0.2 \
+  --hp env_pixels_per_meter=2 \
+  --render
+```
+
+When `--scenario-kind` is provided, the replay uses the matching deterministic
+scenario geometry for the initial state and HUD metadata, keeping the starting
+positions, goals, and heading/speed scales aligned with the training setup.
+
 ---
 
 ## Cost function overview
