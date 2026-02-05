@@ -342,6 +342,65 @@ llm_reports/
     └── llm_summary.json
 ```
 
+### Sensitivity testing from LIME + SHAP top features
+
+After generating `lime_summary.json` and `shap_summary.json`, you can run a
+feature-perturbation sensitivity test that validates whether the top-attributed
+features actually drive the model outputs.
+
+The helper script `asv_neat/scripts/explanation_sensitivity.py`:
+
+1. Loads matching scenario folders from `--lime-dir` and `--shap-dir`.
+2. For every common step, extracts the top-`k` (default 3) most influential
+   features separately for:
+   * LIME rudder attributions,
+   * LIME throttle attributions,
+   * SHAP rudder attributions,
+   * SHAP throttle attributions.
+3. Perturbs each selected feature by ±1%, ±2%, and ±3% (configurable).
+4. Re-runs the NEAT model for each perturbation and records:
+   * rudder output deltas and magnitude changes,
+   * rudder inferred helm label changes (`turn_port`, `turn_starboard`,
+     `keep_straight`),
+   * throttle raw output deltas,
+   * throttle discrete command/label changes.
+
+Example:
+
+```bash
+python asv_neat/scripts/explanation_sensitivity.py \
+  --winner winners/crossing_winner.pkl \
+  --config asv_neat/configs/neat_crossing.cfg \
+  --lime-dir lime_reports \
+  --shap-dir shap_reports \
+  --output-dir sensitivity_reports
+```
+
+Optional overrides:
+
+```bash
+python asv_neat/scripts/explanation_sensitivity.py \
+  --winner winners/crossing_winner.pkl \
+  --lime-dir lime_reports \
+  --shap-dir shap_reports \
+  --output-dir sensitivity_reports \
+  --top-k 3 \
+  --perturbation-pcts 1 2 3
+```
+
+Output layout:
+
+```
+sensitivity_reports/
+├── sensitivity_index.json
+└── 01_crossing/
+    └── sensitivity_summary.json
+```
+
+Each `sensitivity_summary.json` contains per-step baseline features/outputs and
+per-feature perturbation rows for both explainers, including directional
+changes (+/-) and output deltas so the influence can be compared directly.
+
 ### Building a combined LIME+SHAP animation
 
 After running the individual LIME and SHAP explainers you can stitch their
