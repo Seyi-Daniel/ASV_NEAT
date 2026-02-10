@@ -9,3 +9,6 @@ Pillow>=9.4
 # Explanation pipelines (LIME/SHAP)
 lime>=0.2.0
 shap>=0.44.0
+
+# Sensitivity summary table export
+openpyxl>=3.1
